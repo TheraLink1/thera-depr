@@ -1,15 +1,11 @@
 #!/bin/bash
-# post-commit hook — tworzy osobną notatkę w Obsidian dla każdego commita
+# post-commit hook — tworzy notatkę w Obsidian dla każdego commita
 
-# === KONFIGURACJA ===
 VAULT="/Users/desirecutieqb/Library/Mobile Documents/iCloud~md~obsidian/Documents/inzynierka"
 SERVICE_FOLDER="TheraLink"
-# ====================
 
-# Upewnij się że folder serwisu istnieje
 mkdir -p "$VAULT/$SERVICE_FOLDER"
 
-# Zbierz dane z commita
 DATE=$(date '+%Y-%m-%d %H:%M')
 COMMIT_HASH=$(git rev-parse --short HEAD)
 COMMIT_MSG=$(git log -1 --pretty=%B | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -23,7 +19,14 @@ CHANGED_FILES=$(git diff-tree --no-commit-id -r --name-status HEAD | \
   }')
 STATS=$(git diff-tree --no-commit-id -r --shortstat HEAD)
 
-# Nazwa pliku = data + pierwsza linia wiadomości commita (znaki specjalne zastąpione _)
+# Poprzednia notatka (do wiki-linka)
+PREV_NOTE=$(ls "$VAULT/$SERVICE_FOLDER/"*.md 2>/dev/null | sort | tail -1)
+PREV_LINK=""
+if [ -n "$PREV_NOTE" ]; then
+  PREV_BASENAME=$(basename "$PREV_NOTE" .md)
+  PREV_LINK="- [[$SERVICE_FOLDER/$PREV_BASENAME]]"
+fi
+
 SAFE_NAME=$(echo "$COMMIT_MSG" | tr '/:*?"<>|\\' '_' | cut -c1-80)
 OUTPUT_FILE="$VAULT/$SERVICE_FOLDER/$(date '+%Y-%m-%d') $SAFE_NAME.md"
 
@@ -37,6 +40,13 @@ $STATS
 
 ## Zmienione pliki
 $CHANGED_FILES
+
+## AI Summary
+_Oczekuje na podsumowanie Claude..._
+
+## Powiązane
+- [[TheraLink/_index]]
+$PREV_LINK
 EOF
 
 echo "✓ Obsidian: $(date '+%Y-%m-%d') $SAFE_NAME.md"

@@ -13,4 +13,4 @@ backend/dist/
 frontend/.env
 backend/.env
 frontend/.next/
-node_modules
+node_modules**/.obsidian/
