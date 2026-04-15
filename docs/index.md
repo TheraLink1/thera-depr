@@ -10,6 +10,7 @@ Centralne repozytorium wiedzy o architekturze i migracji platformy TheraLink.
 ## Auth & Infrastruktura
 
 - [[keycloak-setup]] — Konfiguracja Keycloak: Docker, motywy FTL, role, integracja Angular
+- [[infrastructure]] — Dev (Docker Compose) + Prod (Azure AKS): pełny przewodnik wdrożenia
 
 ## Frontend
 
@@ -20,9 +21,11 @@ Centralne repozytorium wiedzy o architekturze i migracji platformy TheraLink.
 ## Porządek migracji
 
 ```
-1. Infrastructure (Docker + Keycloak + MongoDB + Kafka)   → [[keycloak-setup]]
-2. Frontend Angular                                        → [[frontend-migration]]
-3. User Service + Appointment Service                      → [[backend-migration]]
-4. Notification Service (Kafka consumer)                   → [[backend-migration]]
-5. Payment Service (osobne repo)                           → [[payment-service]]
+1. Infrastructure (Docker Compose dev + Azure setup)       → [[infrastructure]]
+2. Keycloak (Auth)                                         → [[keycloak-setup]]
+3. Frontend Angular                                        → [[frontend-migration]]
+4. User Service + Appointment Service                      → [[backend-migration]]
+5. Notification Service (Kafka consumer)                   → [[backend-migration]]
+6. Payment Service (osobne repo PCI-DSS)                   → [[payment-service]]
+7. Kubernetes prod deploy (AKS)                            → [[infrastructure]]
 ```

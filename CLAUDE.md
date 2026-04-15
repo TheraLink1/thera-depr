@@ -30,11 +30,31 @@ TheraLink is a psychology appointment booking platform migrating from a Node.js/
 | `theralink-notification-service` | Event-driven email/SMS (Kafka consumer only) |
 | `theralink-payment-service` | Stripe integration (SEPARATE restricted-access repo) |
 | `theralink-contracts` | Shared Kafka event schemas + DTOs (Maven library) |
-| `theralink-infrastructure` | Kubernetes manifests + Helm charts |
+| `theralink-infrastructure` | Docker Compose (dev) + Kubernetes manifests + Helm charts + deploy scripts (PRIVATE repo) |
+
+## Actual Repo Names (on disk)
+| CLAUDE.md name | Actual folder |
+|---|---|
+| `theralink-user-service` | `thera-rest-service` |
+| `theralink-keycloak` | `thera-keycloak` |
+| `theralink-payment-service` | `thera-payment-service` |
+| `theralink-frontend` | `thera-ui` |
+
+## Environments
+- **Dev:** Docker Compose — single `docker-compose.yml` in `theralink-infrastructure/docker-compose/`
+- **Prod:** Azure AKS (Kubernetes) — manifests in `theralink-infrastructure/k8s/` + Helm in `theralink-infrastructure/helm/`
+- **Secrets dev:** `.env` file (gitignored), template in `.env.example`
+- **Secrets prod:** Azure Key Vault + Kubernetes CSI Secret Store Driver
+- **MongoDB prod:** Azure Cosmos DB (MongoDB API) — per-service database
+- **Kafka prod:** Azure Event Hubs with Kafka protocol — no code changes needed
+- **Container registry:** Azure Container Registry (ACR) — `acrtheralink.azurecr.io`
 
 ## Migration Documents
+- `docs/infrastructure.md` — Dev Docker Compose + Azure AKS prod deployment guide
 - `docs/frontend-migration.md` — Step-by-step Angular frontend migration plan
-- `docs/architecture.md` — Full microservices architecture overview
+- `docs/backend-migration.md` — Spring Boot microservices implementation guide
+- `docs/keycloak-setup.md` — Keycloak configuration guide
+- `docs/payment-service.md` — Payment service (PCI-DSS, restricted)
 
 ## Current Backend Entities (PostgreSQL / Prisma)
 - **Client** — cognitoId, name, email, phoneNumber, history
