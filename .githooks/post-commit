@@ -1,0 +1,42 @@
+#!/bin/bash
+# post-commit hook — tworzy osobną notatkę w Obsidian dla każdego commita
+
+# === KONFIGURACJA ===
+VAULT="/Users/desirecutieqb/Library/Mobile Documents/iCloud~md~obsidian/Documents/inzynierka"
+SERVICE_FOLDER="TheraLink"
+# ====================
+
+# Upewnij się że folder serwisu istnieje
+mkdir -p "$VAULT/$SERVICE_FOLDER"
+
+# Zbierz dane z commita
+DATE=$(date '+%Y-%m-%d %H:%M')
+COMMIT_HASH=$(git rev-parse --short HEAD)
+COMMIT_MSG=$(git log -1 --pretty=%B | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+CHANGED_FILES=$(git diff-tree --no-commit-id -r --name-status HEAD | \
+  awk '{
+    if ($1 == "A") status="dodano";
+    else if ($1 == "M") status="zmieniono";
+    else if ($1 == "D") status="usunięto";
+    else status=$1;
+    print "- [" status "] " $2
+  }')
+STATS=$(git diff-tree --no-commit-id -r --shortstat HEAD)
+
+# Nazwa pliku = data + pierwsza linia wiadomości commita (znaki specjalne zastąpione _)
+SAFE_NAME=$(echo "$COMMIT_MSG" | tr '/:*?"<>|\\' '_' | cut -c1-80)
+OUTPUT_FILE="$VAULT/$SERVICE_FOLDER/$(date '+%Y-%m-%d') $SAFE_NAME.md"
+
+cat > "$OUTPUT_FILE" << EOF
+# $COMMIT_MSG
+
+**Data:** $DATE
+**Hash:** \`$COMMIT_HASH\`
+**Serwis:** $SERVICE_FOLDER
+$STATS
+
+## Zmienione pliki
+$CHANGED_FILES
+EOF
+
+echo "✓ Obsidian: $(date '+%Y-%m-%d') $SAFE_NAME.md"

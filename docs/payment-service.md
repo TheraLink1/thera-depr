@@ -1344,3 +1344,11 @@ curl http://localhost:8085/actuator/health
 # https://stripe.com/docs/webhooks/test
 stripe listen --forward-to localhost:8085/payments/webhook
 ```
+
+---
+
+## Powiązane
+
+- [[index]] — Mapa dokumentacji
+- [[backend-migration]] — Pozostałe Spring Boot serwisy (user, appointment, psychologist)
+- [[keycloak-setup]] — Autoryzacja JWT (SecurityConfig w payment-service)

@@ -1448,3 +1448,12 @@ docker cp theralink-keycloak:/tmp/realm-export.json ./realm-export.json
 ```
 
 Zapisz `realm-export.json` do repozytorium `theralink-keycloak` — będzie automatycznie importowany przy starcie kontenera (`--import-realm`).
+
+---
+
+## Powiązane
+
+- [[index]] — Mapa dokumentacji
+- [[backend-migration]] — Spring Boot serwisy korzystające z Keycloak JWT
+- [[frontend-migration]] — Angular + keycloak-angular integracja
+- [[payment-service]] — Serwis płatności (też używa Keycloak do autoryzacji)

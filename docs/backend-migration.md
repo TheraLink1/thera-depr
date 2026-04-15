@@ -2593,3 +2593,12 @@ mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dlogging.level.com.theralin
 # Health check
 curl http://localhost:8081/actuator/health
 ```
+
+---
+
+## Powiązane
+
+- [[index]] — Mapa dokumentacji
+- [[keycloak-setup]] — Konfiguracja Keycloak (auth dla wszystkich serwisów)
+- [[payment-service]] — Serwis płatności (osobne repo)
+- [[frontend-migration]] — Migracja frontendu Angular

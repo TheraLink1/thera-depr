@@ -282,3 +282,11 @@ export class PsychologistsModule {}
 | `keycloakId` | Use everywhere instead of `cognitoId` (migration) |
 | Colors | Primary `#2b6369`, secondary `#224f54`, accent `#00bfa5` — define as SCSS vars |
 | Date formatting | Always use `date-fns` functions — never manual string slicing |
+
+---
+
+## Powiązane
+
+- [[index]] — Mapa dokumentacji
+- [[frontend-migration]] — Plan migracji Angular
+- [[typescript-style-guide]] — Standardy TypeScript uzupełniające ten przewodnik

@@ -1216,3 +1216,13 @@ server {
 | Payment | Stripe test card `4242 4242 4242 4242` → webhook → `paymentStatus = PAID` |
 | Prod build | `ng build --configuration=production` — no errors |
 | Docker | `docker build . && docker run -p 4200:80` — app served at :4200 |
+
+---
+
+## Powiązane
+
+- [[index]] — Mapa dokumentacji
+- [[backend-migration]] — Spring Boot API z którym łączy się Angular
+- [[keycloak-setup]] — Keycloak auth (keycloak-angular, APP_INITIALIZER, guard)
+- [[angular-style-guide]] — Konwencje kodu Angular dla TheraLink
+- [[typescript-style-guide]] — Standardy TypeScript

@@ -485,3 +485,11 @@ format(parseISO(apt.scheduledAt), 'dd.MM.yyyy')
 amount: number;            // 20000 = 200.00 zł
 `${(amount / 100).toFixed(2)} zł`
 ```
+
+---
+
+## Powiązane
+
+- [[index]] — Mapa dokumentacji
+- [[angular-style-guide]] — Konwencje Angular (uzupełnia ten przewodnik)
+- [[frontend-migration]] — Plan migracji Angular
