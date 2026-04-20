@@ -1,8 +1,8 @@
 # TheraLink — Architektura systemu (diagramy)
 
 > **Jak używać:**
-> - **Miro** → zainstaluj plugin "Mermaid Diagrams for Miro" → wklej kod bloku
-> - **mermaid.live** → otwórz stronę, wklej kod → screenshot do prezentacji
+> - **mermaid.live** → wklej kod bloku → Download PNG/SVG
+> - **Miro** → Insert → Apps → Mermaid Diagrams → wklej kod
 > - **Obsidian** → renderuje automatycznie
 
 ---
@@ -11,122 +11,150 @@
 
 ```mermaid
 graph TB
-    subgraph CLIENT["👤 Użytkownik"]
-        BROWSER["Przeglądarka\n(Angular 21)"]
+    BROWSER["🖥️ Angular 21\n:4200"]
+
+    subgraph AUTH_GW["Auth & Gateway"]
+        direction LR
+        KEYCLOAK["🔐 Keycloak\n:8080"]
+        GATEWAY["⚡ API Gateway\n:8090"]
     end
 
-    subgraph EXTERNAL["🌐 Zewnętrzne API"]
-        STRIPE["💳 Stripe\nPłatności"]
-        ZOOM["📹 Zoom API\nMeetingi"]
-        SENDGRID["📧 SendGrid\nEmail"]
+    subgraph SERVICES["Mikroserwisy"]
+        direction LR
+        USER["User Service\n:8081"]
+        APPT["Appointment Service\n:8082"]
+        PSYCH["Psychologist Service\n:8083"]
+        NOTIF["Notification Service\n:8084"]
+        PAY["💳 Payment Service\n:8085 ⚠️"]
     end
 
-    subgraph INFRA["🔐 Infrastruktura"]
-        KEYCLOAK["Keycloak\n:8080\nAutoryzacja / SSO"]
-        GATEWAY["API Gateway\n:8090\nSpring Cloud Gateway"]
-        KAFKA["Apache Kafka\n:9092\nMessage Bus"]
+    KAFKA[["🔄 Apache Kafka\n:9092"]]
+
+    subgraph DBS["🗄️ MongoDB — bazy danych"]
+        direction LR
+        DB1[("users")]
+        DB2[("appointments")]
+        DB3[("psychologists")]
+        DB4[("notifications")]
+        DB5[("payments")]
     end
 
-    subgraph SERVICES["⚙️ Mikroserwisy"]
-        USER["User Service\n:8081\nKlienci + Psycholodzy"]
-        APPT["Appointment Service\n:8082\nWizyty + Zoom"]
-        PSYCH["Psychologist Service\n:8083\nSloty dostępności"]
-        NOTIF["Notification Service\n:8084\nEmail — tylko Kafka"]
-        PAY["Payment Service\n:8085\n⚠️ PCI-DSS"]
-    end
-
-    subgraph DATABASES["🗄️ Bazy danych (MongoDB)"]
-        DB_USERS[("theralink-users")]
-        DB_APPT[("theralink-appointments")]
-        DB_PSYCH[("theralink-psychologists")]
-        DB_NOTIF[("theralink-notifications")]
-        DB_PAY[("theralink-payments")]
+    subgraph EXT["🌐 Zewnętrzne API"]
+        direction LR
+        STRIPE["💳 Stripe"]
+        ZOOM["📹 Zoom"]
+        SG["📧 SendGrid"]
     end
 
     BROWSER -->|"HTTPS + JWT"| GATEWAY
-    BROWSER -->|"OIDC login"| KEYCLOAK
+    BROWSER <-->|"OIDC login"| KEYCLOAK
     GATEWAY -->|"weryfikuje JWT"| KEYCLOAK
-    GATEWAY --> USER
-    GATEWAY --> APPT
-    GATEWAY --> PSYCH
-    GATEWAY --> PAY
+    GATEWAY --> USER & APPT & PSYCH & PAY
 
-    USER --- DB_USERS
-    APPT --- DB_APPT
-    PSYCH --- DB_PSYCH
-    NOTIF --- DB_NOTIF
-    PAY --- DB_PAY
+    PAY -->|"payment.completed / failed"| KAFKA
+    APPT -->|"appointment.confirmed / reminder"| KAFKA
+    KAFKA --> APPT
+    KAFKA --> NOTIF
 
-    PAY -->|"theralink.payment.completed"| KAFKA
-    PAY -->|"theralink.payment.failed"| KAFKA
-    APPT -->|"theralink.appointment.confirmed"| KAFKA
-    APPT -->|"theralink.appointment.reminder"| KAFKA
+    USER --- DB1
+    APPT --- DB2
+    PSYCH --- DB3
+    NOTIF --- DB4
+    PAY --- DB5
 
-    KAFKA -->|"konsument"| APPT
-    KAFKA -->|"konsument"| NOTIF
-
-    PAY <-->|"REST API"| STRIPE
-    APPT <-->|"REST API"| ZOOM
-    NOTIF -->|"REST API"| SENDGRID
+    PAY <-->|"REST"| STRIPE
+    APPT <-->|"REST"| ZOOM
+    NOTIF -->|"REST"| SG
 
     style PAY fill:#ffcccc,stroke:#cc0000
-    style KEYCLOAK fill:#e6f3ff,stroke:#0066cc
     style KAFKA fill:#fff3cd,stroke:#856404
-    style GATEWAY fill:#e6f3ff,stroke:#0066cc
+    style KEYCLOAK fill:#dce8f5,stroke:#0066cc
+    style GATEWAY fill:#dce8f5,stroke:#0066cc
 ```
 
 ---
 
-## 2. Przepływ: Rezerwacja wizyty + Płatność + Zoom + Email
+## 2. Kafka — przepływ eventów
+
+```mermaid
+graph LR
+    subgraph PROD["📤 Producenci"]
+        direction TB
+        PAY["💳 Payment Service"]
+        APPT_P["📅 Appointment Service"]
+    end
+
+    subgraph KAFKA_BOX["🔄 Apache Kafka"]
+        T1(["theralink.payment.completed"])
+        T2(["theralink.payment.failed"])
+        T3(["theralink.appointment.confirmed"])
+        T4(["theralink.appointment.reminder"])
+    end
+
+    subgraph CONS["📥 Konsumenci"]
+        direction TB
+        APPT_C["📅 Appointment Service"]
+        NOTIF["📧 Notification Service"]
+    end
+
+    PAY --> T1 & T2
+    APPT_P --> T3 & T4
+
+    T1 --> APPT_C
+    T1 & T2 & T3 & T4 --> NOTIF
+
+    style KAFKA_BOX fill:#fff3cd,stroke:#856404
+    style PAY fill:#ffcccc,stroke:#cc0000
+```
+
+---
+
+## 3. Przepływ: Rezerwacja + Płatność + Zoom + Email
 
 ```mermaid
 sequenceDiagram
     actor Klient
     participant Angular
     participant Gateway as API Gateway
-    participant Appt as Appointment Service
-    participant Pay as Payment Service
+    participant Appt as Appointment\nService
+    participant Pay as Payment\nService
     participant Kafka
-    participant Notif as Notification Service
+    participant Notif as Notification\nService
     participant Zoom as Zoom API
     participant SendGrid
 
-    Klient->>Angular: Wybiera wizytę i psychologa
+    Klient->>Angular: Wybiera wizytę
     Angular->>Gateway: POST /appointments
-    Gateway->>Appt: utwórz wizytę (status: PENDING)
-    Appt-->>Angular: { appointmentId, status: PENDING }
+    Gateway->>Appt: utwórz wizytę
+    Appt-->>Angular: { appointmentId, PENDING }
 
     Angular->>Gateway: POST /payments/intent
-    Gateway->>Pay: utwórz PaymentIntent w Stripe
+    Gateway->>Pay: utwórz PaymentIntent
     Pay-->>Angular: { clientSecret }
 
-    Angular->>Angular: Stripe.js — formularz karty
-    Klient->>Angular: Wpisuje kartę testową 4242...
-    Angular->>Pay: Stripe webhook: payment_intent.succeeded
+    Klient->>Angular: Podaje kartę (4242...)
+    Angular-->>Pay: Stripe webhook:\npayment_intent.succeeded
+    Pay->>Kafka: payment.completed
 
-    Pay->>Kafka: theralink.payment.completed
-    Pay-->>Angular: { status: SUCCESS }
+    Kafka->>Appt: payment.completed
+    Appt->>Appt: PENDING → PAID
 
-    Kafka->>Appt: konsumuje payment.completed
-    Appt->>Appt: status: PENDING → PAID
-
-    alt Wizyta zdalna (REMOTE)
-        Appt->>Zoom: POST /v2/users/me/meetings
-        Zoom-->>Appt: { joinUrl, startUrl, meetingId }
+    alt Wizyta zdalna
+        Appt->>Zoom: Utwórz meeting
+        Zoom-->>Appt: { joinUrl, startUrl }
     end
 
-    Appt->>Appt: status: PAID → CONFIRMED
-    Appt->>Kafka: theralink.appointment.confirmed (+ zoomJoinUrl)
+    Appt->>Appt: PAID → CONFIRMED
+    Appt->>Kafka: appointment.confirmed
 
-    Kafka->>Notif: konsumuje appointment.confirmed
-    Notif->>SendGrid: email do Klienta (potwierdzenie + link Zoom)
-    Notif->>SendGrid: email do Psychologa (nowa wizyta + link start)
-    Notif->>Notif: zapisz EmailLog w MongoDB
+    Kafka->>Notif: appointment.confirmed
+    Notif->>SendGrid: Email do Klienta\n(potwierdzenie + link Zoom)
+    Notif->>SendGrid: Email do Psychologa\n(nowa wizyta)
 ```
 
 ---
 
-## 3. Przepływ: Autoryzacja (Keycloak)
+## 4. Przepływ: Autoryzacja (Keycloak PKCE)
 
 ```mermaid
 sequenceDiagram
@@ -136,47 +164,44 @@ sequenceDiagram
     participant Gateway as API Gateway
     participant Service as Mikroserwis
 
-    Użytkownik->>Angular: Klika "Zaloguj się"
-    Angular->>Keycloak: Redirect (Authorization Code + PKCE)
+    Użytkownik->>Angular: Klik "Zaloguj się"
+    Angular->>Keycloak: Redirect + code_challenge (PKCE)
     Keycloak-->>Użytkownik: Strona logowania TheraLink
     Użytkownik->>Keycloak: Login + hasło
     Keycloak-->>Angular: Authorization Code
-    Angular->>Keycloak: Wymień kod na tokeny
-    Keycloak-->>Angular: Access Token (JWT) + Refresh Token
+    Angular->>Keycloak: Wymień kod → tokeny
+    Keycloak-->>Angular: Access Token (JWT 15min)\n+ Refresh Token (7 dni)
 
-    Note over Angular: Token przechowywany w pamięci (nie localStorage!)
-
-    Angular->>Gateway: Request + Authorization: Bearer <JWT>
-    Gateway->>Keycloak: Pobierz JWKS (klucze publiczne)
-    Gateway->>Gateway: Weryfikuj podpis JWT
-    Gateway->>Service: Request (JWT zweryfikowany)
-    Service->>Service: @AuthenticationPrincipal Jwt jwt<br/>keycloakId = jwt.getSubject()
+    Angular->>Gateway: Request +\nAuthorization: Bearer JWT
+    Gateway->>Keycloak: Pobierz JWKS
+    Gateway->>Gateway: Zweryfikuj podpis JWT
+    Gateway->>Service: Przekaż request
+    Service->>Service: jwt.getSubject()\n→ keycloakId
     Service-->>Angular: Response
 ```
 
 ---
 
-## 4. Przepływ: Przypomnienie dzień przed wizytą
+## 5. Przepływ: Przypomnienie dzień przed wizytą
 
 ```mermaid
 sequenceDiagram
-    participant Scheduler as Appointment Service\n(Scheduler — cron 10:00)
+    participant Scheduler as Appointment Service\n⏰ cron: 10:00 każdy dzień
     participant MongoDB
     participant Kafka
     participant Notif as Notification Service
     participant SendGrid
 
-    Note over Scheduler: Każdego dnia o 10:00
-    Scheduler->>MongoDB: Znajdź wizyty na jutro (status: CONFIRMED)
+    Scheduler->>MongoDB: Znajdź wizyty na jutro\n(status: CONFIRMED)
     MongoDB-->>Scheduler: Lista wizyt
 
     loop Dla każdej wizyty
-        Scheduler->>Kafka: theralink.appointment.reminder
-        Kafka->>Notif: konsumuje reminder
-        Notif->>Notif: Sprawdź EmailLog — czy już wysłano?
-        alt Email nie był wysłany
-            Notif->>SendGrid: Email do Klienta (przypomnienie + link Zoom)
-            Notif->>SendGrid: Email do Psychologa (przypomnienie)
+        Scheduler->>Kafka: appointment.reminder
+        Kafka->>Notif: appointment.reminder
+        Notif->>MongoDB: Czy email już wysłano?
+        alt Nie wysłano
+            Notif->>SendGrid: Reminder do Klienta
+            Notif->>SendGrid: Reminder do Psychologa
             Notif->>MongoDB: Zapisz EmailLog
         end
     end
@@ -184,51 +209,43 @@ sequenceDiagram
 
 ---
 
-## 5. Mapa serwisów — porty i repozytoria
+## 6. Mapa repozytoriów i infrastruktury Azure
 
 ```mermaid
-graph LR
-    subgraph REPOS["Repozytoria (GitHub)"]
-        R1["thera-ui\nAngular 21 / port 4200"]
-        R2["thera-keycloak\nKeycloak 25 / port 8080"]
-        R3["theralink-api-gateway\nSpring Cloud / port 8090"]
-        R4["thera-rest-service\nUser Service / port 8081"]
-        R5["theralink-appointment-service\nport 8082"]
-        R6["theralink-psychologist-service\nport 8083"]
-        R7["theralink-notification-service\nport 8084 (brak HTTP)"]
-        R8["thera-payment-service\n⚠️ PCI-DSS / port 8085"]
-        R9["thera-docker-compose\nDev environment"]
-        R10["thera-infrastructure\nHelm + K8s manifests"]
+graph TB
+    subgraph REPOS["📦 Repozytoria"]
+        direction LR
+        R1["thera-ui\nAngular :4200"]
+        R2["thera-keycloak\nKeycloak :8080"]
+        R3["api-gateway\n:8090"]
+        R4["thera-rest-service\nUser :8081"]
+        R5["appointment-service\n:8082"]
+        R6["psychologist-service\n:8083"]
+        R7["notification-service\n:8084"]
+        R8["thera-payment-service\n⚠️ :8085"]
+    end
+
+    subgraph INFRA_REPOS["🛠️ Infrastruktura"]
+        direction LR
+        I1["thera-docker-compose\nDev environment"]
+        I2["thera-infrastructure\nHelm + K8s"]
     end
 
     subgraph AZURE["☁️ Azure (Prod)"]
-        AKS["Azure Kubernetes Service"]
-        ACR["Container Registry\nacrtheralink.azurecr.io"]
+        direction LR
+        ACR["Container Registry\nacrtheralink"]
+        AKS["Kubernetes\nAKS"]
         COSMOS["Cosmos DB\nMongoDB API"]
         EVH["Event Hubs\nKafka protocol"]
         KV["Key Vault\nSekrety"]
     end
 
-    R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 --> ACR
+    REPOS --> ACR
+    I2 --> AKS
     ACR --> AKS
-    AKS --> COSMOS
-    AKS --> EVH
-    AKS --> KV
+    AKS --> COSMOS & EVH & KV
+
+    style R8 fill:#ffcccc,stroke:#cc0000
+    style AKS fill:#dce8f5,stroke:#0066cc
+    style ACR fill:#dce8f5,stroke:#0066cc
 ```
-
----
-
-## Jak wygenerować obraz do prezentacji
-
-### Opcja A — mermaid.live (najszybsze)
-1. Otwórz **https://mermaid.live**
-2. Wklej wybrany blok kodu (np. diagram 1 lub 2)
-3. Kliknij **Download PNG** lub **Download SVG**
-
-### Opcja B — Miro
-1. W Miro: **Insert → Apps → Mermaid Diagrams**
-2. Wklej kod → kliknij **Insert**
-3. Edytuj kolory i układ bezpośrednio na tablicy
-
-### Opcja C — Obsidian
-Otwórz ten plik w Obsidian — wszystkie diagramy renderują się automatycznie.
