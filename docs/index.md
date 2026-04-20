@@ -7,6 +7,14 @@ Centralne repozytorium wiedzy o architekturze i migracji platformy TheraLink.
 - [[backend-migration]] — Migracja Node.js/Express → Spring Boot microservices
 - [[payment-service]] — Serwis płatności Stripe (osobne repo, PCI-DSS)
 
+## Architektura
+
+- [[architecture-diagram]] — Diagramy Mermaid: widok systemu, przepływy, mapa repozytoriów
+
+## Plany implementacji
+
+- [[plan-notifications-zoom]] — Email (SendGrid) + Zoom + format wizyty (zdalnie/stacjonarnie)
+
 ## Auth & Infrastruktura
 
 - [[keycloak-setup]] — Konfiguracja Keycloak: Docker, motywy FTL, role, integracja Angular
