@@ -27,7 +27,6 @@ TheraLink is a psychology appointment booking platform migrating from a Node.js/
 | `theralink-user-service` | Client + Psychologist profile management |
 | `theralink-appointment-service` | Appointment lifecycle |
 | `theralink-psychologist-service` | Availability slot management |
-| `theralink-notification-service` | Event-driven email/SMS (Kafka consumer only) |
 | `theralink-payment-service` | Stripe integration (SEPARATE restricted-access repo) |
 | `theralink-contracts` | Shared Kafka event schemas + DTOs (Maven library) |
 | `theralink-infrastructure` | Docker Compose (dev) + Kubernetes manifests + Helm charts + deploy scripts (PRIVATE repo) |
@@ -104,7 +103,6 @@ TheraLink is a psychology appointment booking platform migrating from a Node.js/
 | User Service | 8081 |
 | Appointment Service | 8082 |
 | Psychologist Service | 8083 |
-| Notification Service | 8084 |
 | Payment Service | 8085 |
 | MongoDB | 27017 |
 | Kafka | 9092 |
