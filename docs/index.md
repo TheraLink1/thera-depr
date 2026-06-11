@@ -26,6 +26,15 @@ Centralne repozytorium wiedzy o architekturze i migracji platformy TheraLink.
 - [[angular-style-guide]] — Konwencje i wzorce Angular dla TheraLink
 - [[typescript-style-guide]] — Standardy TypeScript w projekcie
 
+## Stories (thera-ui)
+
+- [[story-02-transloco-scopes-slot-picker]] — Transloco scopes, AppointmentSlotPicker, testy (2026-06-10)
+
+## Wdrożenie produkcyjne Azure (2026-06-11)
+
+- [[azure-aks-deployment]] — snapshot stanu produkcyjnego (zasoby, koszt, Pody, sekrety, realm Keycloak)
+- [[azure-deployment-lessons]] — 10 kluczowych pułapek napotkanych podczas deploy + rozwiązania
+
 ## Porządek migracji
 
 ```

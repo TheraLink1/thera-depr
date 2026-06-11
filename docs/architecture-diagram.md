@@ -24,7 +24,6 @@ graph TB
         USER["User Service\n:8081"]
         APPT["Appointment Service\n:8082"]
         PSYCH["Psychologist Service\n:8083"]
-        NOTIF["Notification Service\n:8084"]
         PAY["💳 Payment Service\n:8085 ⚠️"]
     end
 
@@ -35,7 +34,6 @@ graph TB
         DB1[("users")]
         DB2[("appointments")]
         DB3[("psychologists")]
-        DB4[("notifications")]
         DB5[("payments")]
     end
 
@@ -43,7 +41,6 @@ graph TB
         direction LR
         STRIPE["💳 Stripe"]
         ZOOM["📹 Zoom"]
-        SG["📧 SendGrid"]
     end
 
     BROWSER -->|"HTTPS + JWT"| GATEWAY
@@ -52,19 +49,15 @@ graph TB
     GATEWAY --> USER & APPT & PSYCH & PAY
 
     PAY -->|"payment.completed / failed"| KAFKA
-    APPT -->|"appointment.confirmed / reminder"| KAFKA
     KAFKA --> APPT
-    KAFKA --> NOTIF
 
     USER --- DB1
     APPT --- DB2
     PSYCH --- DB3
-    NOTIF --- DB4
     PAY --- DB5
 
     PAY <-->|"REST"| STRIPE
     APPT <-->|"REST"| ZOOM
-    NOTIF -->|"REST"| SG
 
     style PAY fill:#ffcccc,stroke:#cc0000
     style KAFKA fill:#fff3cd,stroke:#856404
@@ -81,27 +74,22 @@ graph LR
     subgraph PROD["📤 Producenci"]
         direction TB
         PAY["💳 Payment Service"]
-        APPT_P["📅 Appointment Service"]
     end
 
     subgraph KAFKA_BOX["🔄 Apache Kafka"]
         T1(["theralink.payment.completed"])
         T2(["theralink.payment.failed"])
-        T3(["theralink.appointment.confirmed"])
-        T4(["theralink.appointment.reminder"])
     end
 
     subgraph CONS["📥 Konsumenci"]
         direction TB
         APPT_C["📅 Appointment Service"]
-        NOTIF["📧 Notification Service"]
     end
 
     PAY --> T1 & T2
-    APPT_P --> T3 & T4
 
     T1 --> APPT_C
-    T1 & T2 & T3 & T4 --> NOTIF
+    T2 --> APPT_C
 
     style KAFKA_BOX fill:#fff3cd,stroke:#856404
     style PAY fill:#ffcccc,stroke:#cc0000
@@ -109,7 +97,7 @@ graph LR
 
 ---
 
-## 3. Przepływ: Rezerwacja + Płatność + Zoom + Email
+## 3. Przepływ: Rezerwacja + Płatność + Zoom
 
 ```mermaid
 sequenceDiagram
@@ -119,9 +107,7 @@ sequenceDiagram
     participant Appt as Appointment\nService
     participant Pay as Payment\nService
     participant Kafka
-    participant Notif as Notification\nService
     participant Zoom as Zoom API
-    participant SendGrid
 
     Klient->>Angular: Wybiera wizytę
     Angular->>Gateway: POST /appointments
@@ -145,11 +131,6 @@ sequenceDiagram
     end
 
     Appt->>Appt: PAID → CONFIRMED
-    Appt->>Kafka: appointment.confirmed
-
-    Kafka->>Notif: appointment.confirmed
-    Notif->>SendGrid: Email do Klienta\n(potwierdzenie + link Zoom)
-    Notif->>SendGrid: Email do Psychologa\n(nowa wizyta)
 ```
 
 ---
@@ -182,34 +163,7 @@ sequenceDiagram
 
 ---
 
-## 5. Przepływ: Przypomnienie dzień przed wizytą
-
-```mermaid
-sequenceDiagram
-    participant Scheduler as Appointment Service\n⏰ cron: 10:00 każdy dzień
-    participant MongoDB
-    participant Kafka
-    participant Notif as Notification Service
-    participant SendGrid
-
-    Scheduler->>MongoDB: Znajdź wizyty na jutro\n(status: CONFIRMED)
-    MongoDB-->>Scheduler: Lista wizyt
-
-    loop Dla każdej wizyty
-        Scheduler->>Kafka: appointment.reminder
-        Kafka->>Notif: appointment.reminder
-        Notif->>MongoDB: Czy email już wysłano?
-        alt Nie wysłano
-            Notif->>SendGrid: Reminder do Klienta
-            Notif->>SendGrid: Reminder do Psychologa
-            Notif->>MongoDB: Zapisz EmailLog
-        end
-    end
-```
-
----
-
-## 6. Mapa repozytoriów i infrastruktury Azure
+## 5. Mapa repozytoriów i infrastruktury Azure
 
 ```mermaid
 graph TB
@@ -221,7 +175,6 @@ graph TB
         R4["thera-rest-service\nUser :8081"]
         R5["appointment-service\n:8082"]
         R6["psychologist-service\n:8083"]
-        R7["notification-service\n:8084"]
         R8["thera-payment-service\n⚠️ :8085"]
     end
 

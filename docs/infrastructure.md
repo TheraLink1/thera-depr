@@ -83,7 +83,6 @@ theralink-infrastructure/
 │   │   └── service.yml
 │   ├── appointment-service/
 │   ├── psychologist-service/
-│   ├── notification-service/
 │   ├── api-gateway/
 │   └── ingress/
 │       └── ingress.yml
@@ -150,7 +149,6 @@ volumes:
   mongo_users_data:
   mongo_appointments_data:
   mongo_psychologists_data:
-  mongo_notifications_data:
   mongo_payments_data:
   kafka_data:
   zookeeper_data:
@@ -279,15 +277,6 @@ services:
     volumes:
       - mongo_psychologists_data:/data/db
 
-  mongo-notifications:
-    image: mongo:7
-    container_name: thera-mongo-notifications
-    networks: [theralink-network]
-    ports:
-      - "27020:27017"
-    volumes:
-      - mongo_notifications_data:/data/db
-
   # ─────────────────────────────────────────
   # SPRING BOOT SERVICES
   # ─────────────────────────────────────────
@@ -311,7 +300,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     restart: on-failure
 
-  # appointment-service, psychologist-service, notification-service
+  # appointment-service, psychologist-service, payment-service
   # — analogiczne bloki (dodaj gdy repo będą gotowe)
 
   # ─────────────────────────────────────────

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "index.md",
+                "file": "thesis/rozdzial-07-mongodb.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "index"
+              "title": "rozdzial-07-mongodb"
             }
           }
         ]
@@ -185,6 +185,19 @@
   },
   "active": "2841acc7f0a5eb8f",
   "lastOpenFiles": [
+    "azure-deployment-lessons.md",
+    "azure-aks-deployment.md",
+    "thesis/rozdzial-06-kafka.md",
+    "thesis/rozdzial-04-migracja-frontendu.md",
+    "thesis/rozdzial-07-mongodb.md",
+    "thesis/rozdzial-05-keycloak.md",
+    "thesis/_prompt-startowy.md",
+    "story-02-transloco-scopes-slot-picker.md",
+    "thesis/rozdzial-03-migracja-backendu.md",
+    "thesis/rozdzial-02-projektowanie-nowej-architektury.md",
+    "thesis/wstep.md",
+    "index.md",
+    "thesis-content.md",
     "architecture-diagram.md",
     "plan-notifications-zoom.md",
     "infrastructure.md",
