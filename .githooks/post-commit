@@ -9,8 +9,19 @@ mkdir -p "$VAULT/$SERVICE_FOLDER"
 DATE=$(date '+%Y-%m-%d %H:%M')
 COMMIT_HASH=$(git rev-parse --short HEAD)
 COMMIT_MSG=$(git log -1 --pretty=%B | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-CHANGED_FILES=$(git diff-tree --no-commit-id -r --name-status HEAD | \
-  awk '{
+
+# AI Summary = body commit msg (linie po pierwszej, bez stopki Claude/Co-Authored).
+# Jeśli body puste — placeholder.
+COMMIT_BODY=$(git log -1 --pretty=%B | tail -n +2 \
+  | sed '/^🤖 Generated with/,$d' \
+  | sed '/^Co-Authored-By/d' \
+  | awk 'NF{found=1} found' \
+  | sed -e :a -e '/^\s*$/N;/\n\s*$/D')
+if [ -z "$COMMIT_BODY" ]; then
+  COMMIT_BODY="_Brak body w commit message — uzupełnij ręcznie lub poproś Claude o podsumowanie._"
+fi
+
+CHANGED_FILES=$(git diff-tree --no-commit-id -r --name-status HEAD |   awk '{
     if ($1 == "A") status="dodano";
     else if ($1 == "M") status="zmieniono";
     else if ($1 == "D") status="usunięto";
@@ -19,7 +30,6 @@ CHANGED_FILES=$(git diff-tree --no-commit-id -r --name-status HEAD | \
   }')
 STATS=$(git diff-tree --no-commit-id -r --shortstat HEAD)
 
-# Poprzednia notatka (do wiki-linka)
 PREV_NOTE=$(ls "$VAULT/$SERVICE_FOLDER/"*.md 2>/dev/null | sort | tail -1)
 PREV_LINK=""
 if [ -n "$PREV_NOTE" ]; then
@@ -42,7 +52,7 @@ $STATS
 $CHANGED_FILES
 
 ## AI Summary
-_Oczekuje na podsumowanie Claude..._
+$COMMIT_BODY
 
 ## Powiązane
 - [[TheraLink/_index]]
