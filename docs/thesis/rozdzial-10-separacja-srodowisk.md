@@ -100,7 +100,7 @@ w zmiennej `MONGODB_URI` (por. rozdział 9, w tym obejście rozwiązywania adres
 
 ## 10.4 Broker komunikatów — Kafka kontra Azure Event Hubs
 
-Lokalnie działa pełny stos Confluent Kafka z Zookeeperem (~500 MB RAM), w produkcji — zarządzana
+Lokalnie działa pełny stos Confluent Kafka z Zookeeperem (około 500 MB RAM), w produkcji — zarządzana
 usługa Event Hubs eksponująca protokół Kafka [X], bez Zookeepera i bez własnej infrastruktury.
 Świadomie zrezygnowano z warstwy abstrakcji nad protokołem: aplikacja korzysta z oficjalnych
 bibliotek Kafka, a Event Hubs jest ich bezpośrednim zamiennikiem. Różnica dotyczy adresu
@@ -429,8 +429,8 @@ Z porównania płyną cztery wnioski końcowe. Po pierwsze — ten sam kod aplik
 środowiskach, co potwierdza skuteczność realizacji zasady *dev/prod parity*. Po drugie — różnice
 ograniczają się wyłącznie do warstwy konfiguracji, nie dotykając logiki biznesowej. Po trzecie —
 chart Helm z plikiem `values.prod.yaml` stanowi wersjonowany, jawny artefakt zachowujący te
-różnice w repozytorium. Po czwarte — koszt środowiska produkcyjnego (~44–62 USD/mies. wobec 0 USD
-lokalnie) jest uzasadniony jego skalą, izolacją i niezawodnością; w kontekście pracy dyplomowej
+różnice w repozytorium. Po czwarte — koszt środowiska produkcyjnego (około 44–62 USD/mies. wobec
+0 USD lokalnie) jest uzasadniony jego skalą, izolacją i niezawodnością; w kontekście pracy dyplomowej
 środowisko to można uruchamiać na potrzeby demonstracji i wyłączać poza nią. Tym samym domyka się
 blok rozdziałów poświęconych infrastrukturze (8–10): od spakowania serwisów w obrazy kontenerowe,
 przez ich orkiestrację i wdrożenie w chmurze Azure, po świadome rozdzielenie środowisk
