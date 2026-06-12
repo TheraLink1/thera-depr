@@ -169,6 +169,7 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 
 > ROZDZIAŁ MIGRACYJNY: porównanie przed/po WPLECIONE w treść (każdy podrozdział mini-tabelka, na końcu zbiorczy podrozdział).
 > Materiały źródłowe: [[azure-aks-deployment]], [[azure-deployment-metrics]], [[infrastructure]], `thera-infrastructure/helm/theralink/`, `thera-infrastructure/scripts/`, Dockerfile w każdym repo serwisu, `realm-export.json`. **Realne metryki** z świeżego deploy w `docs/azure-deployment-metrics.md` (sekcje 7, 8, 9 — rozmiary obrazów, czasy buildów, czasy startu podów).
+> **Screeny:** 8 sztuk (Rys. 8.1–8.8). Pełne instrukcje w [[_screen-checklist-8-9-10]]. Wstawiać przez `> 📸 **[SCREEN DO DODANIA]**` zgodnie z numeracją.
 
 **Proponowane podrozdziały:**
 
@@ -176,16 +177,19 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 - Co opisać: filozofia kontenerów (izolacja procesów + system plików, brak hypervisora jak w VM), warstwy obrazu, Dockerfile jako deklaratywny przepis, multi-stage builds dla małych obrazów produkcyjnych
 - Przed/Po: monolit uruchamiany przez `npm start` lokalnie vs. każdy mikroserwis spakowany w obraz Docker z dokładnie określonym JRE/Node runtime
 - ~3-4 listingi: Dockerfile thera-rest-service (multi-stage Java 25), Dockerfile thera-ui (multi-stage Node 22 + nginx), Dockerfile thera-keycloak (z `kc.sh build --db postgres`)
+- **Screen 8.1** (warstwy obrazu): `docs/screens/rozdz-08/8.1-docker-history.png`
 
 8.2. **Środowisko developerskie — Docker Compose**
 - Co opisać: jak `docker-compose.yml` łączy serwisy w sieć `theralink-network`, komunikacja przez nazwy kontenerów (DNS), volumes dla persystencji, healthchecki, `depends_on`
 - Przed/Po: lokalnie odpalane 4 procesy z różnymi portami vs. `docker-compose up` jedno polecenie postawia cały stack (Keycloak + Postgres + MongoDB + Kafka + Zookeeper + kafka-ui)
 - Listingi: `thera-infrastructure/docker-compose/docker-compose.yml`, sekcja Kafka z dwoma listenerami (INTERNAL + EXTERNAL), `.env.example`
+- **Screen 8.2** (docker-compose ps): `docs/screens/rozdz-08/8.2-docker-compose-ps.png`
 
 8.3. **Orkiestracja — Kubernetes (teoria)**
 - Co opisać: dlaczego Kubernetes (deklaratywność, self-healing, rolling updates, skalowanie), słownik pojęć: Pod, Deployment, StatefulSet, Service, Ingress, ConfigMap, Secret, PersistentVolume
 - Architektura klastra: control plane (API server, scheduler, etcd) vs. worker nodes
 - ~1-2 diagramy: relacja Pod ↔ Deployment ↔ Service ↔ Ingress
+- **Screen 8.3** (k9s — pods view): `docs/screens/rozdz-08/8.3-k9s-pods.png`
 
 8.4. **Manifesty Kubernetes dla TheraLink**
 - Co opisać: stworzyliśmy manifesty per serwis — Deployment + Service + SecretProviderClass. StatefulSet dla Postgres (Keycloak DB) z `volumeClaimTemplates` (PVC tworzony automatycznie per replika)
@@ -196,21 +200,26 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 - Co opisać: problem 5 serwisów × 3 środowiska = 15 plików YAML do utrzymania; Helm rozwiązuje to przez templating Go (`{{ .Values.x }}`); pojęcia Chart, Release, Values
 - Listingi: `helm/theralink/Chart.yaml`, `values.yaml` (defaults), `values.prod.yaml` (override), `_helpers.tpl` (wspólne labelki), fragment template z relacją do values
 - Przed/Po: 15 plików YAML z kopiowaniem vs. 1 chart + 2 values files; cykl życia: `helm install`, `helm upgrade`, `helm rollback`
+- **Screen 8.4** (helm template output): `docs/screens/rozdz-08/8.4-helm-template-output.png`
+- **Screen 8.5** (helm history): `docs/screens/rozdz-08/8.5-helm-history.png`
 
 8.6. **Healthchecki — Liveness vs Readiness probes**
 - Co opisać: różnica między liveness (czy aplikacja żyje — jak nie, K8s ją restartuje) a readiness (czy aplikacja jest gotowa przyjmować ruch — jak nie, Service nie kieruje do niej traffic). Spring Boot Actuator endpoints. Pułapka: `/actuator/health/readiness` i `/actuator/health/liveness` jako sub-paths wymagają `permitAll("/actuator/health/**")` w SecurityConfig (u nas użyliśmy `/actuator/health` exact match).
 - Listingi: deployment.yaml fragment z `readinessProbe`/`livenessProbe`, SecurityConfig.java
 - Przed/Po: docker-compose `healthcheck:` (lokalna sprawdzka kontenera) vs. K8s probes (sprawdzane przez kubelet, wpływają na routing ruchu)
+- **Screen 8.6** (pod probes describe): `docs/screens/rozdz-08/8.6-pod-probes.png`
 
 8.7. **Zarządzanie sekretami — CSI Secret Store Driver**
 - Co opisać: dlaczego sekrety nie mogą być w obrazach Docker ani w ConfigMap (base64, nie szyfrowane); Azure Key Vault Provider for CSI Driver — pobiera sekrety w runtime i montuje jako pliki + opcjonalnie synchronizuje do K8s Secret; AKS addon `azureKeyvaultSecretsProvider`
 - Listingi: `keycloak-secretproviderclass.yaml` (objects array, secretObjects mapping), fragment deployment z `volumeMounts` i `secretKeyRef` w env
 - Przed/Po: `.env` plik w docker-compose (gitignored) vs. SecretProviderClass + Managed Identity (rola Key Vault Secrets User przyznana AKS kubelet identity)
+- **Screen 8.7** (secret w env podzie): `docs/screens/rozdz-08/8.7-csi-secret-env.png`
 
 8.8. **Ingress + TLS — wystawienie aplikacji na świat**
 - Co opisać: różnica między Service typu ClusterIP/LoadBalancer/NodePort vs. Ingress (warstwa L7 z routing po hostname + path); NGINX Ingress Controller w klastrze (instalowany przez Helm, wystawia jedno Public IP); cert-manager + Let's Encrypt automatyczne wystawianie TLS przez HTTP-01 challenge
 - Listingi: `ingress.yaml` (rules dla 3 hosts: root, auth.*, api.*), `cluster-issuer-letsencrypt.yaml` (ACME server + email + solvers)
 - Przed/Po: docker-compose mapuje porty bezpośrednio (8080:8080, 4200:4200) vs. K8s — wszystkie serwisy wewnątrz klastra, jeden Ingress wystawia 1 IP z 3 subdomenami i TLS
+- **Screen 8.8** (kubectl get ingress + certificate): `docs/screens/rozdz-08/8.8-ingress-cert.png`
 
 8.9. **Podsumowanie migracji infrastruktury — zbiorcza tabela**
 - Co opisać: zbiorcze porównanie wszystkich elementów (uruchamianie, sieć, sekrety, persystencja, healthchecks, skalowanie, monitoring, koszt). Wnioski: dla 5 serwisów dev local jest prostszy, ale prod K8s daje rozproszenie, self-healing, deklaratywność, łatwy rollback
@@ -224,6 +233,7 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 
 > ROZDZIAŁ MIGRACYJNY: porównanie przed/po WPLECIONE.
 > Materiały źródłowe: [[azure-aks-deployment]], [[azure-deployment-metrics]], [[azure-deployment-lessons]] (10 pułapek), `thera-infrastructure/scripts/setup-azure.sh`, `add-secrets.sh`, `build-and-push.sh`. **Region produkcyjny: swedencentral** (nie polandcentral — patrz Lessons §1 — Azure for Students policy `sys.regionrestriction`).
+> **Screeny:** 10 sztuk (Rys. 9.1–9.10). Pełne instrukcje w [[_screen-checklist-8-9-10]]. Większość to widoki Azure Portal (Resource Group, ACR, AKS, Cosmos, Event Hubs, Key Vault) + DNS provider + przeglądarka.
 
 **Proponowane podrozdziały:**
 
@@ -231,49 +241,59 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 - Co opisać: Azure vs AWS vs GCP (kryterium: dostępność Azure for Students dla studenta uczelni, polski region, integracje z Microsoft Entra), typ subskrypcji "Azure for Students" — $100 kredytu, brak karty, `spendingLimit: On` (automatyczna blokada po wyczerpaniu)
 - Wymienić: tenant `ans-elblag.pl`, subscription ID `d148d3bc-fff7-4d1b-9f08-fc5a633d0312`
 - Pułapka do opisania: **polityka `sys.regionrestriction`** — Azure for Students ma whitelistę 5 regionów (losowych per subskrypcja), Polska zablokowana, wybrany `swedencentral`
+- **Screen 9.2** (polityka regionów): `docs/screens/rozdz-09/9.2-region-policy.png`
 
 9.2. **Architektura zasobów Azure**
 - Co opisać: 6 zasobów w Resource Group `rg-theralink-prod-se-001`: ACR (registry obrazów), Key Vault (sekrety), Cosmos DB Mongo (baza), Event Hubs (Kafka), AKS (klaster), oraz implicitne (zarządzane przez AKS) — VNet, NSG, Load Balancer, Public IP
 - Diagram: hierarchia Subscription → Resource Group → Resources + zarządzane MC_* RG
 - Listingi: output `az resource list -g rg-theralink-prod-se-001 -o table`
+- **Screen 9.1** (Azure Portal Resource Group): `docs/screens/rozdz-09/9.1-resource-group.png`
 
 9.3. **Container Registry i build pipeline**
 - Co opisać: ACR Basic SKU ($5/mc), 10 GB miejsca; w kontekście Azure for Students ACR Tasks (cloud build) jest **zablokowany** → build lokalny z `docker buildx --platform linux/amd64 --push` (krytyczne dla Apple Silicon)
 - Listingi: `scripts/build-and-push.sh` (z fragmentem `docker buildx`), output `az acr repository list`
 - Przed/Po: Docker Hub publiczny (każdy widzi) vs. ACR prywatny w tej samej sieci co AKS (szybki pull, attach przez Managed Identity)
 - Metryki z [[azure-deployment-metrics]] §7: rozmiary obrazów (Keycloak 225 MB, Spring 162-170 MB, frontend 25 MB)
+- **Screen 9.3** (ACR repositories): `docs/screens/rozdz-09/9.3-acr-repositories.png`
 
 9.4. **AKS — managed Kubernetes**
 - Co opisać: Azure zarządza control plane (API server, etcd, scheduler) za darmo, klient płaci tylko za worker nodes; konfiguracja: 1× Standard_B2s_v2 (2 vCPU, 4 GiB RAM), K8s 1.35, attach-acr (Managed Identity pull), addon azure-keyvault-secrets-provider (CSI driver)
 - Pułapki do opisania: (a) **Standard_B2s v1 zablokowany** — używamy v2; (b) **K8s 1.30 to LTS-only** — używamy 1.35; (c) **Allocatable CPU 1900m**, system zjada ~1000m, dla aplikacji zostaje ~900m → wszystkie `resources.requests.cpu` agresywnie niskie (50-100m)
 - Listingi: fragment `setup-azure.sh` z `az aks create`, output `az aks show`
+- **Screen 9.4** (AKS Overview): `docs/screens/rozdz-09/9.4-aks-overview.png`
 
 9.5. **Baza danych — Azure Cosmos DB for MongoDB**
 - Co opisać: managed MongoDB z protokołem Mongo (sterowniki Spring Data Mongo działają bez zmian); **Free Tier** (1× per subskrypcja, 1000 RU/s + 25 GB na zawsze za $0); 2 bazy: `theralink-users` (400 RU/s), `theralink-payments` (400 RU/s)
 - Pułapka **krytyczna** do opisania: Spring Boot 4 + `${MONGODB_URI:default}` w application.yml NIE PODSTAWIA wartości env var gdy URI zawiera `:` (Cosmos hasło ma `:`) — placeholder resolver myli się. Rozwiązanie: `JDK_JAVA_OPTIONS=-Dspring.data.mongodb.connection-string=$(MONGODB_URI)` na poziomie JVM. Patrz Lessons §6.
 - Listingi: fragment `setup-azure.sh` z `az cosmosdb create --enable-free-tier true`, deployment.yaml z JDK_JAVA_OPTIONS
+- **Screen 9.5** (Cosmos DB Free Tier + bazy): `docs/screens/rozdz-09/9.5-cosmos-free-tier.png`
 
 9.6. **Kafka — Azure Event Hubs**
 - Co opisać: Event Hubs jest natywnym brokerem Azure, ale wystawia kompatybilny protokół Kafka (Spring Kafka działa bez zmian kodu); Standard SKU 1 TU, połączenie SASL_SSL + PLAIN; topics: `theralink.payment.completed`, `theralink.payment.failed`
 - Listingi: fragment `setup-azure.sh` (`az eventhubs eventhub create --cleanup-policy Delete --retention-time 24`), JAAS config w `add-secrets.sh`
 - Przed/Po: lokalna Kafka w docker-compose (Zookeeper + Kafka) vs. Event Hubs (zero infrastruktury, ten sam protokół, SASL_SSL zamiast PLAINTEXT)
 - Pułapka: nowa składnia `az eventhubs eventhub create` w 2026 wymaga `--cleanup-policy` i `--retention-time` (godziny) zamiast deprecated `--message-retention` (dni)
+- **Screen 9.6** (Event Hubs z topikami): `docs/screens/rozdz-09/9.6-event-hubs-kafka.png`
 
 9.7. **Sekrety — Azure Key Vault + RBAC**
 - Co opisać: Key Vault w trybie RBAC (nie Access Policies — nowsze, ról `Key Vault Secrets Officer` dla użytkownika, `Key Vault Secrets User` dla AKS Managed Identity); 8 sekretów w Key Vault; CSI Driver pobiera i synchronizuje do K8s Secret
 - Listingi: fragment `add-secrets.sh` (z secret_data JSON), output `az keyvault secret list`
 - Przed/Po: `.env` plik gitignored vs. Key Vault z audytem, szyfrowaniem at-rest, integracją z managed identities
+- **Screen 9.7** (Key Vault z 8 sekretami): `docs/screens/rozdz-09/9.7-key-vault-secrets.png`
 
 9.8. **DNS, Ingress i TLS produkcyjny**
 - Co opisać: rekordy DNS A: `theralink.pl`, `auth.theralink.pl`, `api.theralink.pl` → Public IP `51.12.157.106`; NGINX Ingress Controller (LoadBalancer Service alokuje 1 Public IP — taniej niż Application Gateway $20/mc → $4/mc); cert-manager z Let's Encrypt prod issuer; HTTP-01 challenge przez NGINX
 - Listingi: rekordy DNS (3× A → 51.12.157.106), `cluster-issuer-letsencrypt.yaml`, `kubectl get certificate` output
 - Pułapka do opisania: nip.io jako tymczasowa "magiczna" domena gdy nie mieliśmy jeszcze theralink.pl
+- **Screen 9.8** (DNS rekordy A): `docs/screens/rozdz-09/9.8-dns-records.png`
+- **Screen 9.9** (przeglądarka theralink.pl + kłódka HTTPS): `docs/screens/rozdz-09/9.9-https-browser.png`
 
 9.9. **Keycloak w produkcji — pułapki Keycloak 25.0.4**
 - Co opisać: realm `theralink` zaimportowany przez REST API `POST /admin/realms`; klient `theralink-angular` (public, PKCE); role CLIENT, PSYCHOLOGIST, ADMIN
 - Pułapka **krytyczna**: KC_BOOTSTRAP_ADMIN_USERNAME/PASSWORD **nie tworzą admina** mimo że pojawiają się w `kc.sh show-config`. Rozwiązanie: manualny SQL INSERT do `user_entity` + `credential` + `user_role_mapping` z PBKDF2-SHA256 hash (27500 iteracji, 16-byte salt). Patrz Lessons §7.
 - Pułapka pomniejsza: custom theme `template.ftl` zawiera `<#list properties.scripts?split(' ')>` ale `theme.properties` nie ma klucza `scripts` → FreeMarker `InvalidReferenceException` → 500 na każdym `/realms/*/auth`. Naprawa: usunięcie bloku.
 - Listingi: PBKDF2 Python script + SQL INSERT, `realm-export.json` redirectUris z `https://theralink.pl/*`
+- **Screen 9.10** (Keycloak login z custom motywem): `docs/screens/rozdz-09/9.10-keycloak-login.png`
 
 9.10. **Push obrazów i pierwszy deploy**
 - Co opisać: kolejność: `setup-azure.sh` → `add-secrets.sh` → `build-and-push.sh` → `kubectl apply cluster-issuer` → `helm install ingress-nginx` + `helm install cert-manager` → `helm install theralink`; 8 revisions Helm (debugowanie kolejnych pułapek)
@@ -304,6 +324,7 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 
 > ROZDZIAŁ MIGRACYJNY: porównanie przed/po jest TYM ROZDZIAŁEM — całe są o różnicach. Mini-tabelki per kwestia, na końcu zbiorcza.
 > Materiały źródłowe: [[azure-aks-deployment]] vs `thera-infrastructure/docker-compose/docker-compose.yml`; pliki `application.yml` vs `application-prod.yml` w serwisach Spring Boot; `environment.ts` vs `environment.prod.ts` w Angular; `values.yaml` vs `values.prod.yaml` w Helm.
+> **Screeny:** 6 sztuk (Rys. 10.1–10.6). Pełne instrukcje w [[_screen-checklist-8-9-10]]. Większość to side-by-side porównania (dev vs prod) wstawiane jako dwa osobne rysunki obok siebie w pracy.
 
 **Proponowane podrozdziały:**
 
@@ -315,6 +336,8 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 - Mini-tabela: dev `docker-compose up -d` (jeden komputer, ~1 GB RAM łącznie) vs prod `helm install theralink ./helm/theralink -f values.prod.yaml --set ...` (klaster Azure)
 - Listingi: docker-compose serwis Keycloak vs Helm deployment Keycloak (równolegle pokazać oba)
 - Wniosek: Helm = `docker-compose for K8s`, ale z templating i rolling updates
+- **Screen 10.1** (docker-compose ps — dev): `docs/screens/rozdz-10/10.1-docker-compose-ps.png`
+- **Screen 10.2** (kubectl get pods — prod): `docs/screens/rozdz-10/10.2-kubectl-pods.png`
 
 10.3. **Baza danych — MongoDB kontener vs Azure Cosmos DB**
 - Mini-tabela: dev `mongo:7` w docker-compose (jedna instancja, brak replikacji, brak SSL) vs prod Cosmos DB (managed, replikacja regionalna w wbudowana, SSL wymagany, RU-based scaling)
@@ -336,11 +359,14 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 - Prod: Azure Key Vault z RBAC, SecretProviderClass montuje pliki/synchronizuje K8s Secret, env vars z `secretKeyRef`
 - Lista 8 sekretów (mongodb-uri-*, kafka-sasl-jaas-config, eventhubs-*, keycloak-*, stripe-*)
 - Wniosek: w obu przypadkach aplikacja czyta sekrety jako env vars — kod identyczny
+- **Screen 10.4** (porównanie .env vs Key Vault): `docs/screens/rozdz-10/10.4-secrets-dev-vs-prod.png`
 
 10.7. **Konfiguracja aplikacji — Spring profile + Angular fileReplacements**
 - Spring Boot: `application.yml` (dev defaults) + `application-prod.yml` (overrides) — wybierane przez `SPRING_PROFILES_ACTIVE` env var
 - Angular: `environment.ts` (dev) vs `environment.prod.ts` (prod) — `ng build --configuration production` zamienia plik dzięki `fileReplacements` w `angular.json` (pułapka: bez tego konfiguracja produkcji NIE jest aplikowana!)
 - Listingi: oba pliki environment.ts (porównanie obok siebie)
+- **Screen 10.3** (environment.ts vs environment.prod.ts w IDE): `docs/screens/rozdz-10/10.3-environment-comparison.png`
+- **Screen 10.5** (Spring application.yml z profile): `docs/screens/rozdz-10/10.5-spring-profiles.png`
 
 10.8. **Sieć — docker-compose network vs Kubernetes Services + Ingress**
 - Dev: jedna sieć `theralink-network`, serwisy komunikują się przez nazwy (`http://keycloak:8080`); porty wystawione na host (`8080:8080`, `4200:4200`, `27017:27017`)
@@ -356,6 +382,7 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 - Cykl: edit kodu → `docker-compose up` (test lokalny) → `git commit` → `git push` → `docker buildx build --push` (lokalnie do ACR) → `helm upgrade theralink --set X.tag=<new-sha>` (deploy do prod)
 - Średni czas iteracji: lokalny test ~5s, deploy do prod ~3-4 min (build + push + rolling update)
 - Wniosek: rozłożenie środowisk dev (szybkie iteracje, mock services) vs prod (prawdziwa konfiguracja, prawdziwy koszt)
+- **Screen 10.6** (workflow git → build → helm upgrade): `docs/screens/rozdz-10/10.6-dev-to-prod-workflow.png`
 
 10.11. **Skalowanie — fixed dev vs HPA prod**
 - Dev: 1 replika per serwis (więcej nie ma sensu na laptopie)
