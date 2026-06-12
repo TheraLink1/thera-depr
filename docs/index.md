@@ -34,6 +34,7 @@ Centralne repozytorium wiedzy o architekturze i migracji platformy TheraLink.
 
 - [[azure-aks-deployment]] — snapshot stanu produkcyjnego (zasoby, koszt, Pody, sekrety, realm Keycloak)
 - [[azure-deployment-lessons]] — 10 kluczowych pułapek napotkanych podczas deploy + rozwiązania
+- [[azure-deployment-metrics]] — surowe outputs kubectl/helm/az + rozmiary obrazów, czasy buildów, koszt
 
 ## Porządek migracji
 
