@@ -400,20 +400,175 @@ Planowane screeny: ~6-8 (struktura projektu, lazy routing config, Redux DevTools
 **Liczba planowanych screenów:** ~5-7 (docker-compose ps + kubectl get pods obok siebie, environment.ts vs prod side-by-side, Azure Portal Cosmos DB connection string, .env vs Key Vault secret list, browser localhost:4200 vs theralink.pl).
 
 ### Rozdział 11 — Płatności (Stripe)
-- Teoria: PaymentIntent flow, idempotency, webhook bezpieczeństwo
-- Architektura: thera-payment-service jako osobne restricted repo (PCI-DSS)
-- Stripe SDK (Java)
-- Webhook walidacja: HMAC-SHA256 podpis
-- Event: `theralink.payment.completed` → appointment-service confirm
-- Klucze przez env vars / Azure Key Vault — nigdy hardcoded
-- Refundy i obsługa błędów
+
+> ROZDZIAŁ NOWA FUNKCJONALNOŚĆ (nie migracyjny — monolit nie miał płatności). Realizuje Cel 3 z `wstep.md`.
+> Materiały źródłowe: pełna implementacja w `/Users/desirecutieqb/IdeaProjects/thera-payment-service/`, w szczególności:
+> - `src/main/java/.../service/PaymentService.java` (256 linii — główna logika)
+> - `src/main/java/.../controller/PaymentController.java` (3 endpointy)
+> - `src/main/java/.../config/StripeConfig.java`, `SecurityConfig.java`, `KafkaProducerConfig.java`
+> - `src/main/java/.../kafka/PaymentEventProducer.java`, `AppointmentEventConsumer.java`
+> - `src/main/java/.../model/Payment.java`, `PaymentStatus.java`
+> - `src/main/java/.../repository/PaymentRepository.java`
+> - `src/test/java/.../service/PaymentServiceWebhookTest.java` + 6 innych testów
+> - `src/main/resources/application.yml`, `pom.xml` (zależność Stripe SDK)
+> - `docs/payment-service.md` w repo TheraLink
+> **Konwencje pracy:** styl bezosobowy (jak w rozdz. 10), listingi z numeracją linii z plików źródłowych, tabele numerowane (11.1, 11.2…), rysunki numerowane wg kolejności w tekście, podpisy nad tabelami, podpisy pod rysunkami bez kropki + linia „źródło:". Cytowania jako `[X]` placeholdery.
+> **Screeny:** ~6-8 (Rys. 11.1-11.7+). Konwencja zapisu: `docs/screens/rozdz-11/11.M-opis.png`. Sugerowane: Stripe Dashboard (Test Mode), strona PaymentIntents, terminal webhook events, Stripe.js formularz w aplikacji, MongoDB Compass z dokumentem Payment, k9s pod thera-payment-service, Kafka UI z eventem payment.completed.
+
+**Proponowane podrozdziały:**
+
+11.1. **Teoria — obsługa płatności kartą w aplikacji webowej**
+- Co opisać: dlaczego nie wolno przyjmować numerów kart przez własny backend (PCI-DSS [X], odpowiedzialność prawna i techniczna), zasada **tokenizacji** — backend nigdy nie widzi pełnego numeru karty. Trzy klasyczne modele: hosted checkout (Stripe Checkout), embedded (Stripe.js + Elements), API direct (wymaga certyfikacji PCI-DSS Level 1, nieosiągalne w pracy dyplomowej)
+- Wybór dla TheraLink: **Stripe.js + PaymentIntent API** — Stripe.js renderuje formularz karty (od strony klienta, izolowany iframe), backend tworzy PaymentIntent, frontend potwierdza płatność, Stripe wysyła webhook
+- Krótki przegląd terminologii Stripe: PaymentIntent, client_secret, Webhook, idempotency
+- Diagram (Mermaid lub do wygenerowania): klient → przeglądarka → Stripe Elements → Stripe API; równolegle backend ↔ Stripe API
+- Brak listingów (podrozdział teoretyczny)
+
+11.2. **Architektura — `thera-payment-service` jako wydzielony mikroserwis**
+- Co opisać: dlaczego płatności w osobnym repozytorium ([X] PCI-DSS scope reduction, ograniczony dostęp, niezależny cykl wdrożeniowy, izolacja sekretów). Spring Boot 4.0.3, Java 21 (różnica wobec thera-rest-service używającego Java 25 — uzasadnić: kompatybilność Stripe SDK z LTS Java 21), własna baza Cosmos DB `theralink-payments`
+- Listing 11.1: `pom.xml` fragment z zależnościami: `com.stripe:stripe-java`, `spring-boot-starter-data-mongodb`, `spring-boot-starter-kafka`, `spring-boot-starter-security` + `oauth2-resource-server`
+- Diagram architektury (do wygenerowania): klient Angular → Spring Cloud Gateway → thera-payment-service → Stripe API + MongoDB + Kafka
+
+11.3. **Konfiguracja Stripe SDK i sekretów**
+- Co opisać: trzy klucze Stripe — `pk_test_…` (publishable, frontend), `sk_test_…` (secret, backend), `whsec_…` (webhook secret, walidacja podpisu). Inicjalizacja `Stripe.apiKey` przez `@PostConstruct` w `StripeConfig.java`. Zasada NIGDY w kodzie / NIGDY w repozytorium (CLAUDE.md ujednolicony zakaz)
+- Pułapka: różnica między `pk_…` (publiczny) i `sk_…` (tajny) — pomylenie ich w aplikacji to powszechny błąd
+- Konfiguracja środowiskowa: dev (`application-local.yml`, lokalny `.env`), prod (Azure Key Vault → SecretProviderClass → env vars → `@Value("${stripe.secret-key}")`)
+- Listing 11.2: `StripeConfig.java` (linie 1-25) — inicjalizacja `Stripe.apiKey` w `@PostConstruct`
+- Listing 11.3: fragment `application.yml` z odwołaniem do zmiennych środowiskowych
+
+11.4. **Model danych — kolekcja `payments` w MongoDB**
+- Co opisać: encja `Payment.java` jako agregat — pola: `_id`, `appointmentId` (unique index), `clientKeycloakId` (indexed), `stripePaymentIntentId` (unique index), `amount` (Long, w groszach), `currency`, `status` (enum: PENDING/COMPLETED/FAILED/REFUNDED), `createdAt`, `paidAt`, `description`. Dlaczego kwota w groszach: konwencja Stripe — `Stripe.Amount` używa najmniejszej jednostki waluty (uniknięcie błędów floating-point)
+- Indeksy unikalne: `appointmentId` (jedna wizyta = jedna płatność, idempotencja) i `stripePaymentIntentId` (powiązanie wstecz z Stripe)
+- Listing 11.4: `Payment.java` (model + adnotacje `@Document`, `@Indexed`, `@Builder`)
+- Tabela 11.1: stany płatności (PaymentStatus) + przejścia między nimi
+
+11.5. **Przepływ tworzenia PaymentIntent**
+- Co opisać: endpoint `POST /payments/intent`, autoryzacja przez `@AuthenticationPrincipal Jwt jwt` (klient musi być zalogowany), idempotencja na poziomie aplikacji (`paymentRepository.findByAppointmentId(...).ifPresent(throw)`), budowa `PaymentIntentCreateParams` (amount, currency=pln, automaticPaymentMethods, metadata z appointmentId i clientKeycloakId, description), wywołanie `PaymentIntent.create(params)` — synchroniczne HTTP do `api.stripe.com`, zapis dokumentu Payment w MongoDB ze statusem PENDING, zwrot `clientSecret` + paymentId dla frontendu
+- Pułapka: kwota w groszach (`15000` = 150 PLN), nie w PLN; `automaticPaymentMethods` dobiera dostępne metody (BLIK, karta) w zależności od waluty/kraju
+- Listing 11.5: `PaymentService.createPaymentIntent()` (linie 67-127)
+- Diagram sekwencji (Mermaid): Angular → PaymentController → PaymentService → Stripe API + PaymentRepository
+
+11.6. **Webhook Stripe — bezpieczeństwo i walidacja podpisu**
+- Co opisać: Stripe wysyła HTTP POST do `/payments/webhook` po `payment_intent.succeeded` lub `payment_intent.payment_failed`. **Krytyczne**: weryfikacja podpisu HMAC-SHA256 — bez niej każdy mógłby wysłać fałszywy webhook i oznaczyć płatność jako zapłaconą. Mechanizm: `Webhook.constructEvent(payload, header, secret)` rzuca `SignatureVerificationException` przy nieprawidłowym podpisie
+- Pułapka: `@RequestBody String payload` (NIE `Object`, NIE Map) — Stripe weryfikuje podpis na **surowych bajtach** body; jakakolwiek deserializacja JSON → ponowna serializacja zmienia bajty (kolejność kluczy, spacje) i weryfikacja zawsze upada
+- Routing zdarzeń: switch po `event.getType()` — `payment_intent.succeeded` → zmiana statusu na COMPLETED + publikacja `theralink.payment.completed` na Kafka; `payment_intent.payment_failed` → status FAILED + `theralink.payment.failed`
+- Listing 11.6: `PaymentController.webhook()` (raw String body + nagłówek `Stripe-Signature`)
+- Listing 11.7: `PaymentService.handleWebhook()` (linie 154-171)
+- Diagram sekwencji: Stripe → PaymentController → Webhook.constructEvent → handlePaymentSucceeded → PaymentRepository + KafkaProducer
+- **Tabela 11.2:** lista obsługiwanych typów eventów Stripe (`payment_intent.succeeded`, `payment_intent.payment_failed`) wraz z reakcją systemu
+
+11.7. **Publikacja zdarzeń Kafka — integracja z resztą systemu**
+- Co opisać: `PaymentEventProducer.publishPaymentCompleted(payment)` po pomyślnym przetworzeniu webhooka. Topic `theralink.payment.completed` (rozdział 6 — konwencja). Schemat zdarzenia: `eventType`, `paymentId`, `appointmentId`, `clientKeycloakId`, `amount`, `currency`, `paidAt`, `timestamp`. Klucz wiadomości: `appointmentId` (gwarancja porządku partycji per wizyta)
+- Konsumenci tego eventu (kontekstowo, bez implementacji): planowany `appointment-service` (rozdział 2) konsumujący event w celu aktualizacji statusu wizyty z PENDING na PAID/CONFIRMED
+- Powiązanie z rozdz. 6 (Kafka): odsyłacz do konfiguracji `KafkaTemplate<String, Object>`, `JsonSerializer`
+- Listing 11.8: `PaymentEventProducer.publishPaymentCompleted()`
+
+11.8. **Endpoint `GET /payments/me` — historia płatności klienta**
+- Co opisać: trzeci endpoint kontrolera, autoryzacja przez JWT, zwrot listy `PaymentResponse` (DTO bez wrażliwych pól typu `stripePaymentIntentId`). `paymentRepository.findByClientKeycloakId(clientKeycloakId)`. Wzorzec mapowania entity → DTO przez `PaymentResponse.from(payment)` (statyczna metoda zamiast MapStruct — krótkie mapowanie nie wymaga generatora)
+- Pułapka prywatności: zwrot przez REST API NIE zawiera `stripePaymentIntentId` (sekret) ani `description` (potencjalnie wrażliwa nazwa wizyty); klient widzi tylko `appointmentId`, `amount`, `status`, `createdAt`, `paidAt`
+- Listing 11.9: `PaymentController.getMyPayments()` + `PaymentResponse.from()`
+
+11.9. **Testy jednostkowe i integracyjne**
+- Co opisać: 7 plików testowych w `src/test/java`. Strategia testowa:
+  - `PaymentServiceTest` — testy jednostkowe z `@Mock` repozytorium, `@Mock` producent Kafka, mockowanie statycznej metody `PaymentIntent.create()` przez `try (MockedStatic<PaymentIntent>)` 
+  - `PaymentServiceWebhookTest` — testowanie walidacji podpisu (przykładowy payload + obliczony HMAC poprawny i celowo zepsuty)
+  - `PaymentControllerTest` — `@WebMvcTest` z mockami serwisu, weryfikacja kodów HTTP i autoryzacji JWT
+  - `PaymentRepositoryIntegrationTest` — `@DataMongoTest` z Testcontainers MongoDB
+  - `AppointmentEventConsumerTest`, `PaymentEventProducerTest` — testy Kafka z embedded broker
+  - `ApplicationContextIntegrationTest` — sprawdzenie podnoszenia kontekstu Spring
+- Pułapka: testy webhook MUSZĄ używać prawdziwego algorytmu HMAC-SHA256 z testowym sekretem; nie wolno mockować `Webhook.constructEvent` w testach jednostkowych weryfikujących bezpieczeństwo
+- Listing 11.10: fragment `PaymentServiceWebhookTest` z konstrukcją prawidłowego podpisu HMAC
+
+11.10. **Podsumowanie — realizacja Cel 3 i kierunki rozwoju**
+- Co opisać: tabela 11.3 zbiorcza — endpointy serwisu, zdarzenia Kafka (publikowane i konsumowane), sekrety, modele danych
+- Co zostało zrealizowane: tokenizacja (Stripe.js), PaymentIntent flow, webhook z walidacją HMAC, idempotencja, integracja Kafka, izolacja PCI-DSS przez wydzielone repo, klucze z Azure Key Vault
+- Co poza zakresem (kierunki rozwoju): zwroty (refundy) — endpoint `POST /payments/{id}/refund` + obsługa eventu `charge.refunded`; ponowne próby (Stripe retry policy) wbudowane domyślnie; konfiguracja Stripe Tax dla VAT; alternatywne metody płatności (Apple Pay, Google Pay) — Stripe to obsługuje, wystarczy konfiguracja w panelu
+- Wniosek: implementacja realizuje wymagania Celu 3 z `wstep.md` — rzeczywiste płatności online z bezpieczną walidacją; klucze w trybie testowym `pk_test_…`/`sk_test_…` jak omówiono w §10.7 (uzasadnienie środowiska demonstracyjnego pracy)
+
+**Liczba planowanych screenów:** ~6-8 (Stripe Dashboard Test Mode, lista PaymentIntents w Stripe, terminal CLI `stripe listen --forward-to`, formularz Stripe.js w aplikacji TheraLink, MongoDB Compass z dokumentem Payment, k9s pod thera-payment-service, Kafka UI z eventem theralink.payment.completed, opcjonalnie kc.show-config dla weryfikacji sekretów Stripe w Key Vault).
 
 ### Rozdział 12 — Testy funkcjonalne i wydajnościowe
-- Unit testy (JUnit 5 + Mockito)
-- Integracyjne (Testcontainers — MongoDB, Kafka)
-- E2E (Cypress/Playwright dla Angular)
-- Testy wydajnościowe (JMeter / k6) — porównanie monolit vs mikrousługi
-- Pokrycie testami w monolicie: 0% — startujemy od zera
+
+> ROZDZIAŁ NOWA FUNKCJONALNOŚĆ (nie migracyjny — monolit nie miał testów). Realizuje pkt 12 zakresu pracy.
+> Materiały źródłowe — STAN OBECNY testów (do weryfikacji przez agenta):
+> - `thera-payment-service/src/test/java/` — **7 plików testowych, kompletne pokrycie** (jednostkowe + integracyjne MongoDB Testcontainers + Kafka embedded + webhook HMAC + ApplicationContext)
+> - `thera-rest-service/src/test/java/` — **TYLKO 1 plik** (`TheraRestServiceApplicationTests.java` — auto-generowany szkielet Spring Boot), brak rzeczywistych testów dla controllerów, serwisów, repozytoriów. **Agent MA DODAĆ brakujące testy jednostkowe i integracyjne** (controller, service, mapper, repository z Testcontainers)
+> - `thera-ui/src/app/**/*.spec.ts` — **11 plików testowych Angular Jest** (interceptory, guards, services, state NGXS, AppointmentSlotPicker). Średnie pokrycie — agent MOŻE dodać brakujące jeśli pozostanie czas
+> - `thera-keycloak/`, `thera-infrastructure/` — bez testów (oczekiwane: konfiguracja deklaratywna)
+> - **Testy wydajnościowe (JMeter/k6) — BRAK**. Agent NIE dodaje (wymaga osobnej infrastruktury), opisuje w rozdziale jako kierunek rozwoju z konkretną propozycją scenariuszy testowych
+> **Konwencje pracy:** jak rozdz. 11 (styl bezosobowy, numerowane tabele/rysunki/listingi, [X] cytowania).
+> **Screeny:** ~5-7 (terminal `mvn test` z wynikami, IDE z drzewem testów, raport JaCoCo coverage, terminal `ng test` Angular, Testcontainers w trakcie uruchamiania kontenera MongoDB, propozycja scenariusza JMeter/k6).
+
+**Proponowane podrozdziały:**
+
+12.1. **Teoria — piramida testów w architekturze mikroserwisowej**
+- Co opisać: klasyczna piramida testów [X] (jednostkowe → integracyjne → end-to-end) z proporcjami 70/20/10; różnice w mikroserwisach: testy integracyjne nabierają większego znaczenia (warstwa komunikacji), pojawia się klasa testów kontraktowych (Pact, Spring Cloud Contract — opisać jako koncepcję, niezrealizowane w pracy); testy end-to-end trudniejsze (wymagają wystawienia całego stosu)
+- Strategia TheraLink: testy jednostkowe per serwis (Mockito), integracyjne z Testcontainers (real MongoDB + embedded Kafka), Angular z Jest, brak E2E (zakres pracy), testy wydajnościowe opisane jako kierunek rozwoju
+- Diagram piramidy (Mermaid) ze stosunkami liczby testów per warstwa
+
+12.2. **Testy backend Spring Boot — narzędzia i konwencje**
+- Co opisać: JUnit 5 (`@Test`, `@BeforeEach`, `assertThat`), Mockito (`@Mock`, `@InjectMocks`, `when().thenReturn()`), AssertJ, Spring Boot Test annotations (`@SpringBootTest`, `@WebMvcTest`, `@DataMongoTest`), Testcontainers [X] (`@Testcontainers`, `@Container`, `MongoDBContainer`), embedded Kafka (`@EmbeddedKafka`)
+- Konwencje nazewnictwa: `*Test` (jednostkowe Mockito), `*IntegrationTest` (z Testcontainers), `*ControllerTest` (z @WebMvcTest)
+- Listing 12.1: fragment `PaymentServiceTest` z mockowaniem statycznej metody `PaymentIntent.create` przez `try (MockedStatic<PaymentIntent>)`
+- Listing 12.2: fragment `PaymentRepositoryIntegrationTest` z `@DataMongoTest` + Testcontainers MongoDB
+- Tabela 12.1: lista plików testowych w thera-payment-service (7 plików) z kategoriami
+
+12.3. **Stan testów thera-payment-service — analiza pokrycia**
+- Co opisać: szczegółowa analiza 7 plików testowych (po jednej linii opisu na test): `PaymentServiceTest` (jednostkowe), `PaymentServiceWebhookTest` (walidacja HMAC), `PaymentControllerTest` (`@WebMvcTest` + JWT), `PaymentRepositoryIntegrationTest` (Testcontainers MongoDB), `PaymentEventProducerTest` (embedded Kafka), `AppointmentEventConsumerTest` (embedded Kafka), `ApplicationContextIntegrationTest` (smoke test)
+- Co jest pokryte: pozytywne i negatywne ścieżki webhook, idempotency, autoryzacja JWT, mapowanie entity↔DTO
+- Wynik `mvn test` (do uruchomienia przez agenta): liczba testów, czas wykonania, coverage z JaCoCo
+- Tabela 12.2: macierz testów × klas testowanych (które testy pokrywają które fragmenty)
+
+12.4. **Stan testów thera-rest-service — uzupełnienie braków**
+- Co opisać: stan przed pracą — tylko `TheraRestServiceApplicationTests.java` (auto-generowany szkielet). Agent dodał brakujące testy (lista per dodany plik):
+  - `ClientServiceTest`, `PsychologistServiceTest` — jednostkowe Mockito
+  - `ClientControllerTest`, `PsychologistControllerTest` — `@WebMvcTest` + JWT
+  - `ClientRepositoryIntegrationTest`, `PsychologistRepositoryIntegrationTest` — Testcontainers MongoDB
+  - `ClientMapperTest`, `PsychologistMapperTest` — testy MapStruct
+  - `UserEventProducerTest` — embedded Kafka
+  - opcjonalnie `KafkaProducerConfigTest`
+- Pułapka MapStruct w testach: testowanie wygenerowanego kodu (`ClientMapperImpl`) jest sensowne tylko dla mapperów z `@Mapping` (custom logic); proste pola pomijać
+- Listing 12.3: jeden z dodanych testów (np. `ClientServiceTest`)
+- Tabela 12.3: porównanie pokrycia thera-rest-service PRZED i PO uzupełnieniu
+
+12.5. **Testy frontend Angular — Jest + Spectator**
+- Co opisać: 11 plików `*.spec.ts` w thera-ui — narzędzia: Jest [X] (`describe`, `it`, `expect`), Angular TestBed, HttpClientTestingModule (`HttpTestingController` do mockowania backendu), NGXS test utilities (`TestBed.inject(Store)` + `selectSnapshot`)
+- Wybór Jest zamiast Jasmine/Karma: szybkość wykonania (równoległe), brak przeglądarki, lepsza integracja z TypeScript
+- Listing 12.4: fragment `appointment-slot-picker.component.spec.ts` z testem zachowania komponentu
+- Listing 12.5: fragment `jwt.interceptor.spec.ts` z mockiem `HttpRequest` i sprawdzeniem nagłówka Authorization
+
+12.6. **Testy integracyjne — Testcontainers**
+- Co opisać: filozofia Testcontainers [X] — testy uruchamiają **prawdziwe** kontenery zewnętrznych zależności (MongoDB, Kafka, PostgreSQL), nie mocki; gwarantuje to że nasz kod faktycznie pasuje do faktycznego API serwera, nie do założeń o nim. Inicjalizacja kontenera per klasa testowa (`@Container` static) lub per metoda (instance — droższe)
+- Spring Boot 3+ wsparcie dla `@ServiceConnection` automatycznie konfigurujące `spring.data.mongodb.uri` na adres kontenera bez ręcznego `@DynamicPropertySource`
+- Listing 12.6: pełna konfiguracja Testcontainers MongoDB w teście integracyjnym
+- Pułapka: testy z Testcontainers wymagają działającego Docker daemon — agent ZAZNACZA w rozdziale, że na CI/CD trzeba mieć Docker-in-Docker lub host network
+
+12.7. **Wyniki uruchomienia testów — raport `mvn test`**
+- Co opisać: faktyczne wyniki uruchomienia testów po dorobieniu brakujących (agent uruchamia `mvn test` w obu serwisach i pnpm `ng test` w thera-ui, zbiera liczby do tabeli):
+  - thera-payment-service: liczba testów, sukces/błąd, czas
+  - thera-rest-service (po dodaniu): liczba testów, sukces/błąd, czas
+  - thera-ui: liczba testów, sukces/błąd, czas
+- Tabela 12.4: zbiorcze wyniki + pokrycie kodu z JaCoCo (jeśli skonfigurowane; jeśli nie — agent dodaje plugin jacoco-maven-plugin i ponownie uruchamia)
+- Pułapka: testy z Testcontainers są wolne (pull obrazu MongoDB, start kontenera ~5-10s) — wyróżnić w raporcie różnicą czasu jednostkowych vs integracyjnych
+
+12.8. **Testy wydajnościowe — kierunki rozwoju**
+- **Brak implementacji** — wymaga osobnej infrastruktury, agent NIE dodaje, tylko opisuje proponowane podejście
+- Co opisać: porównanie JMeter [X] (klasyk Java, GUI plus CLI) vs k6 [X] (nowszy, oparty na JavaScript, lepsze CLI), rekomendacja **k6** dla projektu (lekkie, scriptowane, łatwa integracja z CI/CD), przykładowe scenariusze:
+  - **Scenariusz 1 — rezerwacja wizyty**: 50 użytkowników równolegle przez 5 min wykonuje PUT /appointments
+  - **Scenariusz 2 — webhook Stripe**: symulacja 100 webhooków/min do `POST /payments/webhook` z prawidłowymi podpisami HMAC, weryfikacja czasu przetworzenia i opóźnienia publikacji eventu Kafka
+  - **Scenariusz 3 — obciążenie bramki**: peak traffic 500 RPS przez Spring Cloud Gateway, weryfikacja rate limiting
+- Listing 12.7 (hipotetyczny): przykład skryptu k6 dla scenariusza 1
+- Tabela 12.5: planowane metryki (p50, p95, p99 latency, throughput, error rate)
+- Cytowania: artykuł porównujący JMeter vs k6 [X], dokumentacja k6 [X]
+
+12.9. **Podsumowanie — strategia testowania w TheraLink**
+- Co opisać: tabela zbiorcza 12.6 — wszystkie typy testów × wszystkie repozytoria × stan (zrealizowane/brakuje/kierunek rozwoju)
+- Co zostało zrealizowane: testy jednostkowe i integracyjne w obu serwisach Spring Boot, testy Angular w thera-ui, embedded Kafka, Testcontainers MongoDB
+- Co zostało dodane w trakcie pracy nad rozdziałem (agent): X testów do thera-rest-service (przed: 1, po: N — wstawić faktyczną liczbę)
+- Kierunki rozwoju: testy wydajnościowe k6, testy kontraktowe (Pact/Spring Cloud Contract), testy E2E (Cypress) dla pełnego workflow rezerwacja→płatność→potwierdzenie
+- Wniosek: realizacja punktu 12 zakresu pracy obejmuje świadomy wybór warstw testowych, pełne pokrycie warstwy serwisowej i integracyjnej testami wykonywalnymi w pipeline, oraz konkretny plan rozszerzenia o testy wydajnościowe
+
+**Liczba planowanych screenów:** ~5-7 (terminal `mvn test` z wynikami, IDE IntelliJ z drzewem testów, raport JaCoCo coverage, terminal `pnpm test` Angular, Testcontainers logs przy uruchamianiu MongoDB, hipotetyczny widok GUI k6 lub przykładowy skrypt w VS Code).
 
 ### Rozdział 13 — Dokumentacja techniczna
 - OpenAPI / Swagger UI per serwis
