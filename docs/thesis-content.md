@@ -12,10 +12,8 @@ Nowa architektura opiera się na zestawie niezależnych mikroserwisów zbudowany
 
 System umożliwia:
 - rejestrację i zarządzanie profilami klientów oraz psychologów,
-- rezerwację wizyt w formie stacjonarnej lub zdalnej (Zoom),
-- bezpieczne przetwarzanie płatności kartą przez Stripe,
-- automatyczne tworzenie spotkań Zoom po opłaceniu wizyty,
-- wysyłkę powiadomień email (potwierdzenie płatności, potwierdzenie wizyty, przypomnienie dzień przed).
+- rezerwację wizyt w formie stacjonarnej lub zdalnej,
+- bezpieczne przetwarzanie płatności kartą przez Stripe.
 
 Docelowe środowisko produkcyjne oparte jest na Azure Kubernetes Service (AKS) z wykorzystaniem Azure Container Registry, Azure Cosmos DB (MongoDB API) oraz Azure Event Hubs (protokół Kafka).
 
@@ -64,7 +62,7 @@ Docelowe środowisko produkcyjne oparte jest na Azure Kubernetes Service (AKS) z
 
 | Technologia | Wersja | Opis |
 |---|---|---|
-| **Apache Kafka** | 7.6 (Confluent) | Rozproszony system kolejkowania wiadomości. Zapewnia luźne powiązanie (loose coupling) między serwisami — payment-service nie wie o istnieniu notification-service. Używany lokalnie. |
+| **Apache Kafka** | 7.6 (Confluent) | Rozproszony system kolejkowania wiadomości. Zapewnia luźne powiązanie (loose coupling) między serwisami — payment-service publikuje zdarzenia płatności niezależnie od ich konsumentów. Używany lokalnie. |
 | **Azure Event Hubs** | — | Zarządzana usługa Microsoft Azure z wbudowaną kompatybilnością protokołu Kafka. Używana na produkcji — kod Spring Boot działa bez zmian. |
 
 ### Integracje zewnętrzne
@@ -72,8 +70,6 @@ Docelowe środowisko produkcyjne oparte jest na Azure Kubernetes Service (AKS) z
 | Technologia | Opis |
 |---|---|
 | **Stripe** | Platforma płatnicza. Obsługuje tworzenie PaymentIntent, webhooks (potwierdzenie płatności), tokenizację kart. Klucze testowe (`sk_test_`) pozwalają testować bez rzeczywistych transakcji. |
-| **Zoom API (Server-to-Server OAuth)** | API do automatycznego tworzenia spotkań wideo po opłaceniu wizyty. Server-to-Server OAuth zastąpił przestarzałą metodę JWT App (wycofaną przez Zoom w 2023 r.). |
-| **SendGrid** | Platforma do wysyłki emaili transakcyjnych. Bezpłatny tier: 100 emaili/dzień. Używana przez notification-service do wysyłki potwierdzeń płatności, potwierdzeń wizyt i przypomnień. |
 
 ### Infrastruktura
 

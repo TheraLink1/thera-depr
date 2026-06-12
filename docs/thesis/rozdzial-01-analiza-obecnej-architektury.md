@@ -146,7 +146,7 @@
 
 **Temat:** Mapowanie zidentyfikowanych ograniczeń pierwotnej architektury na decyzje o wyborze technologii zastępczych w nowej architekturze mikroserwisowej, wraz z uzasadnieniem każdego wyboru.
 
-**Technologie:** Angular 21, Spring Boot 4.0, Spring Security OAuth2, MongoDB 7.0 / Azure Cosmos DB, Keycloak 25, Apache Kafka / Azure Event Hubs, Docker, Kubernetes (Azure AKS), Stripe, Zoom Server-to-Server OAuth.
+**Technologie:** Angular 21, Spring Boot 4.0, Spring Security OAuth2, MongoDB 7.0 / Azure Cosmos DB, Keycloak 25, Apache Kafka / Azure Event Hubs, Docker, Kubernetes (Azure AKS), Stripe.
 
 **Co zostało zaimplementowane:** Każda z kluczowych decyzji technologicznych nowej architektury została podyktowana konkretnym ograniczeniem zidentyfikowanym w architekturze pierwotnej:
 
@@ -158,11 +158,11 @@
 
 **AWS Cognito → Keycloak.** Keycloak jako rozwiązanie *open source* zapewnia pełną kontrolę nad definicjami ról, *realm* środowiskowymi i przepływami autoryzacji, eliminując ograniczenia opisane w punkcie 11 listy ograniczeń (konieczność rekonfiguracji w konsoli AWS, brak lokalnego środowiska deweloperskiego, koszty MAU). Keycloak można uruchomić zarówno w środowisku deweloperskim (przez Docker Compose), jak i w produkcji na klastrze Kubernetes, bez ponoszenia dodatkowych opłat licencyjnych.
 
-**Apache Kafka.** Nowa architektura wprowadza komunikację asynchroniczną na bazie Apache Kafka (lokalnie) i Azure Event Hubs z kompatybilnym protokołem Kafka (produkcja). Adresuje to ograniczenie nr 7 — brak izolacji modułów oraz brak możliwości realizacji przepływów zdarzeniowych (potwierdzenie płatności, tworzenie spotkania Zoom po opłaceniu wizyty).
+**Apache Kafka.** Nowa architektura wprowadza komunikację asynchroniczną na bazie Apache Kafka (lokalnie) i Azure Event Hubs z kompatybilnym protokołem Kafka (produkcja). Adresuje to ograniczenie nr 7 — brak izolacji modułów oraz brak możliwości realizacji przepływów zdarzeniowych (potwierdzenie płatności, aktualizacja statusu wizyty po jej opłaceniu, publikacja zdarzeń dla potencjalnych konsumentów zewnętrznych).
 
 **Docker + Kubernetes (Azure AKS).** Kontenery Docker zapewniają izolację runtime'u każdego mikroserwisu, eliminując problem współdzielonego procesu Node.js z punktu 1 listy ograniczeń. Orkiestracja Kubernetes na klastrze Azure Kubernetes Service umożliwia niezależne skalowanie poszczególnych serwisów w odpowiedzi na ich indywidualne profile obciążenia.
 
-**Zewnętrzne serwisy:** Stripe stanowi platformę obsługi rzeczywistych płatności kartą — funkcjonalność, której pierwotny monolit nie posiadał. Zoom (przez interfejs *Server-to-Server OAuth*) realizuje automatyczne tworzenie spotkań wideo dla wizyt zdalnych po opłaceniu rezerwacji.
+**Zewnętrzne serwisy:** Stripe stanowi platformę obsługi rzeczywistych płatności kartą — funkcjonalność, której pierwotny monolit nie posiadał. Integracja realizowana jest przez przepływ *PaymentIntent* z asynchronicznym potwierdzeniem płatności poprzez webhooki HTTPS walidowane sygnaturą HMAC-SHA256.
 
 **Kluczowe decyzje techniczne:** Wybór każdej z technologii zastępczych ma jednoznaczne uzasadnienie wynikające z ograniczenia obserwowanego w monolicie. Decyzje nie wynikają z mody technologicznej, lecz z konkretnych potrzeb wynikających z analizy stanu pierwotnego. Wszystkie wybrane technologie posiadają zarządzane odpowiedniki w chmurze Microsoft Azure (Azure Cosmos DB dla MongoDB, Azure Event Hubs dla Kafka, Azure AKS dla Kubernetes), co umożliwia spójną strategię wdrożenia produkcyjnego.
 
@@ -213,6 +213,6 @@
 > **Źródło:** opracowanie własne
 
 > 📸 **[SCREEN DO DODANIA]**
-> **Co pokazać:** Tabela porównawcza technologii pierwotnych i zastępczych — kolumny: "Komponent", "Monolit", "Mikroserwisy", "Uzasadnienie migracji". Można wykonać jako tabelę w Wordzie lub diagram. Wiersze: Frontend (Next.js → Angular), Backend (Express → Spring Boot), Baza danych (PostgreSQL → MongoDB), Tożsamość (Cognito → Keycloak), Komunikacja (REST sync → Kafka async), Orkiestracja (brak → Docker+K8s), Płatności (brak → Stripe), Wideokonferencje (brak → Zoom).
+> **Co pokazać:** Tabela porównawcza technologii pierwotnych i zastępczych — kolumny: "Komponent", "Monolit", "Mikroserwisy", "Uzasadnienie migracji". Można wykonać jako tabelę w Wordzie lub diagram. Wiersze: Frontend (Next.js → Angular), Backend (Express → Spring Boot), Baza danych (PostgreSQL → MongoDB), Tożsamość (Cognito → Keycloak), Komunikacja (REST sync → Kafka async), Orkiestracja (brak → Docker+K8s), Płatności (brak → Stripe).
 > **Sugerowany podpis:** Rys. 1.9. Zestawienie technologii pierwotnej architektury monolitycznej i nowej architektury mikroserwisowej
 > **Źródło:** opracowanie własne

@@ -33,7 +33,7 @@
 
 **user-service** (`thera-rest-service`, port 8081) — odpowiada za zarządzanie profilami użytkowników w dwóch subdomenach: klientów (`Client`) oraz psychologów (`Psychologist`). Każda subdomena posiada dedykowaną encję, repozytorium, mapper MapStruct (`ClientMapper`, `PsychologistMapper`) oraz osobne kontrolery (`ClientController` w `controller/ClientController.java`, `PsychologistController` w `controller/PsychologistController.java`). Serwis publikuje zdarzenia `theralink.user.created` po utworzeniu nowego konta w obu subdomenach. Identyfikatorem domenowym użytkownika jest `keycloakId` — pole `String` korelujące encję z tożsamością zarządzaną w Keycloak.
 
-**appointment-service** (planowany jako osobny mikroserwis) — odpowiada za cykl życia wizyt: rezerwację, akceptację, anulowanie, oznaczanie jako opłaconych po otrzymaniu zdarzenia płatności. Serwis konsumuje zdarzenia `theralink.payment.completed` z magistrali Kafka i publikuje `theralink.appointment.created`, `theralink.appointment.confirmed`. Integruje się z Zoom API (Server-to-Server OAuth) w celu automatycznego tworzenia spotkań wideokonferencyjnych dla wizyt zdalnych po zaksięgowaniu płatności.
+**appointment-service** (planowany jako osobny mikroserwis) — odpowiada za cykl życia wizyt: rezerwację, akceptację, anulowanie, oznaczanie jako opłaconych po otrzymaniu zdarzenia płatności. Serwis konsumuje zdarzenia `theralink.payment.completed` z magistrali Kafka i publikuje `theralink.appointment.created`, `theralink.appointment.confirmed`. Po opłaceniu wizyty status w bazie danych zostaje zaktualizowany z `PENDING` na `CONFIRMED`. W przypadku wizyt zdalnych psycholog i klient kontaktują się poza aplikacją (e-mail, telefon) w celu ustalenia szczegółów spotkania wideokonferencyjnego — pole `meetingLink` w dokumencie wizyty może zostać opcjonalnie uzupełnione przez psychologa.
 
 **psychologist-service** (planowany jako osobny mikroserwis) — odpowiada za zarządzanie slotami dostępności psychologów (kalendarz). Wyodrębnienie tej funkcjonalności do osobnego kontekstu motywowane jest odmiennym profilem operacji bazodanowych (intensywne odczyty kalendarza) oraz potencjałem osobnego skalowania.
 
@@ -64,12 +64,12 @@
 **Zaprojektowane topiki Kafka** (w zakresie pracy):
 - `theralink.user.created` — publikowane przez user-service po utworzeniu nowego konta klienta lub psychologa
 - `theralink.appointment.created` — publikowane przez appointment-service po utworzeniu nowej rezerwacji
-- `theralink.appointment.confirmed` — publikowane przez appointment-service po opłaceniu i (dla wizyt zdalnych) utworzeniu spotkania Zoom
+- `theralink.appointment.confirmed` — publikowane przez appointment-service po opłaceniu wizyty (aktualizacja statusu z `PAID` na `CONFIRMED`)
 - `theralink.payment.completed` — publikowane przez payment-service po otrzymaniu webhooka `payment_intent.succeeded` od Stripe
 - `theralink.payment.failed` — publikowane przez payment-service po otrzymaniu webhooka `payment_intent.payment_failed`
 
 **Zaprojektowane przepływy konsumpcji:**
-- appointment-service konsumuje `theralink.payment.completed` w celu zaktualizowania statusu wizyty z `PENDING` na `PAID` oraz wywołania integracji z Zoom dla wizyt zdalnych
+- appointment-service konsumuje `theralink.payment.completed` w celu zaktualizowania statusu wizyty z `PENDING` na `PAID`, a następnie publikuje `theralink.appointment.confirmed` po pomyślnym przejściu w stan `CONFIRMED`
 - payment-service konsumuje `theralink.appointment.created` w celu przygotowania kontekstu płatności
 
 Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik identyfikatora agregatu) — zapewnia to gwarancję porządku wewnątrz partycji dla wszystkich zdarzeń dotyczących tej samej wizyty. Serializacja payloadu odbywa się w formacie JSON poprzez `JsonSerializer` (producent) i `JsonDeserializer` (konsument); deserialer skonfigurowany jest z parametrem `spring.json.trusted.packages: "*"` w środowisku deweloperskim (na produkcji wartość jest zawężana do konkretnych pakietów). Każda grupa konsumencka posiada własny identyfikator (`spring.kafka.consumer.group-id`) zgodny ze wzorcem `theralink-{serwis}-group`.
@@ -109,7 +109,7 @@ Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik ide
 - `_id`, `appointmentId` (unique index), `clientKeycloakId` (indexed), `stripePaymentIntentId` (unique index), `amount` (Long, w groszach — `Stripe.Amount` używa najmniejszej jednostki waluty), `currency`, `status` (enum: `PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`), `createdAt`, `paidAt`
 
 `Appointment` (planowana kolekcja `appointments` w bazie `theralink-appointments`):
-- `_id`, `clientKeycloakId`, `psychologistKeycloakId`, `date`, `status` (enum: `PENDING`, `PAID`, `CONFIRMED`, `CANCELLED`), `sessionFormat`, `meetingLink` (dla wizyt zdalnych — link Zoom utworzony po opłaceniu)
+- `_id`, `clientKeycloakId`, `psychologistKeycloakId`, `date`, `status` (enum: `PENDING`, `PAID`, `CONFIRMED`, `CANCELLED`), `sessionFormat`, `meetingLink` (opcjonalne — psycholog może ręcznie uzupełnić link do platformy wideokonferencyjnej po opłaceniu wizyty zdalnej; automatyczna integracja z platformą wideokonferencyjną pozostaje poza zakresem pracy)
 
 `AvailabilitySlot` (planowana kolekcja w bazie `theralink-psychologist-schedules`):
 - `_id`, `psychologistKeycloakId`, `date`, `startHour`, `endHour`, `isBooked`
@@ -209,7 +209,7 @@ Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik ide
 
 **Wymiar 1 — liczba procesów wykonawczych.** W architekturze monolitycznej system działa jako dwa procesy (Node.js + Next.js) wdrażane wspólnie. W architekturze mikroserwisowej system docelowo składa się z ośmiu procesów: cztery serwisy domenowe (user, appointment, psychologist, payment), brama API, Keycloak, serwer Kafka, serwer MongoDB — każdy w osobnym kontenerze. Konsekwencja: izolacja awarii (jedna usterka nie powoduje paraliżu systemu) kosztem złożoności operacyjnej (osiem komponentów do monitorowania zamiast dwóch).
 
-**Wymiar 2 — komunikacja między modułami.** W monolicie wszystkie operacje realizowane są synchronicznie w obrębie pojedynczego procesu (bezpośrednie wywołania funkcji Prisma). W architekturze mikroserwisowej komunikacja synchroniczna (REST przez bramę API) współistnieje z asynchroniczną (zdarzenia Kafka). Konsekwencja: możliwość realizacji przepływów zdarzeniowych (potwierdzenie płatności → aktualizacja statusu wizyty → utworzenie spotkania Zoom), niemożliwych w monolicie bez blokowania wątku obsługującego żądanie HTTP.
+**Wymiar 2 — komunikacja między modułami.** W monolicie wszystkie operacje realizowane są synchronicznie w obrębie pojedynczego procesu (bezpośrednie wywołania funkcji Prisma). W architekturze mikroserwisowej komunikacja synchroniczna (REST przez bramę API) współistnieje z asynchroniczną (zdarzenia Kafka). Konsekwencja: możliwość realizacji przepływów zdarzeniowych (potwierdzenie płatności → aktualizacja statusu wizyty → publikacja zdarzenia `appointment.confirmed` dla potencjalnych konsumentów), niemożliwych w monolicie bez blokowania wątku obsługującego żądanie HTTP.
 
 **Wymiar 3 — model danych i baza.** Monolit korzysta z jednej bazy PostgreSQL z rozszerzeniem PostGIS, jednego schematu Prisma z pięcioma modelami i kluczami obcymi opartymi na `cognitoId`. Architektura mikroserwisowa wprowadza wzorzec *database per service* — cztery odrębne bazy MongoDB, każda obsługiwana przez jeden serwis, bez fizycznych kluczy obcych między bazami. Konsekwencja: niezależność ewolucji schematu każdego serwisu kosztem rezygnacji z transakcji wielodokumentowych i konieczności obsługi spójności ostatecznej (ang. *eventual consistency*) na poziomie aplikacji.
 
@@ -233,7 +233,7 @@ Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik ide
 
 **Technologie:** Notacja UML 2.5 (diagram przypadków użycia), Use Case Driven Design.
 
-**Co zostało zaimplementowane:** System TheraLink obsługuje trzech aktorów: klienta (osobę poszukującą pomocy psychologicznej), psychologa (specjalistę świadczącego usługi) oraz administratora (rolę zarządzającą platformą). Aktorami zewnętrznymi są również trzy systemy: Keycloak (dostawca tożsamości), Stripe (procesor płatności) i Zoom (platforma wideokonferencji).
+**Co zostało zaimplementowane:** System TheraLink obsługuje trzech aktorów: klienta (osobę poszukującą pomocy psychologicznej), psychologa (specjalistę świadczącego usługi) oraz administratora (rolę zarządzającą platformą). Aktorami zewnętrznymi są również dwa systemy: Keycloak (dostawca tożsamości) i Stripe (procesor płatności).
 
 **Przypadki użycia aktora "Klient":**
 
@@ -242,9 +242,9 @@ Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik ide
 3. **Wyszukiwanie psychologów** — klient przegląda listę psychologów; filtruje po słowie kluczowym i lokalizacji
 4. **Przeglądanie profilu psychologa** — klient widzi szczegółowy profil (opis, specjalizacja, stawka, format wizyt: stacjonarna/zdalna)
 5. **Rezerwacja wizyty stacjonarnej** — klient wybiera dostępny slot, system tworzy rezerwację w statusie `PENDING`
-6. **Rezerwacja wizyty zdalnej** — analogicznie do rezerwacji stacjonarnej, dodatkowo po opłaceniu generowany jest link do spotkania Zoom
-7. **Opłacenie wizyty kartą** — klient wypełnia formularz Stripe; backend tworzy `PaymentIntent`; po sukcesie Stripe wywołuje webhook, status wizyty zmienia się z `PENDING` na `PAID`, a następnie (dla wizyt zdalnych) na `CONFIRMED` po utworzeniu spotkania Zoom
-8. **Dołączenie do spotkania Zoom** — klient otwiera link Zoom z e-maila lub panelu klienta (link wygenerowany automatycznie)
+6. **Rezerwacja wizyty zdalnej** — analogicznie do rezerwacji stacjonarnej; klient po opłaceniu otrzymuje informację, że psycholog skontaktuje się z nim w celu ustalenia szczegółów spotkania wideokonferencyjnego (link do platformy wideokonferencyjnej psycholog dostarcza poza aplikacją lub uzupełnia ręcznie w polu `meetingLink` wizyty)
+7. **Opłacenie wizyty kartą** — klient wypełnia formularz Stripe; backend tworzy `PaymentIntent`; po sukcesie Stripe wywołuje webhook, status wizyty zmienia się z `PENDING` na `PAID`, a następnie na `CONFIRMED` po publikacji zdarzenia `theralink.appointment.confirmed`
+8. **Wyświetlenie linku do spotkania** — w przypadku wizyty zdalnej, gdy psycholog uzupełnił pole `meetingLink`, klient widzi link w panelu klienta
 9. **Przeglądanie historii wizyt** — klient widzi listę swoich wizyt z filtrowaniem po statusie i dacie
 10. **Edycja profilu** — klient aktualizuje dane kontaktowe (telefon, historię terapii)
 
@@ -256,7 +256,7 @@ Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik ide
 4. **Definiowanie dostępności** — psycholog dodaje sloty czasowe do kalendarza (data, godzina rozpoczęcia, czas trwania)
 5. **Przeglądanie nadchodzących wizyt** — psycholog widzi rezerwacje pogrupowane wg statusu (`PENDING`, `CONFIRMED`)
 6. **Akceptacja / odrzucenie wizyty** — psycholog ręcznie zatwierdza lub odrzuca rezerwacje (status `PENDING` → `ACCEPTED` lub `REJECTED`)
-7. **Dostęp do linku Zoom spotkania zdalnego** — psycholog widzi link Zoom dla wizyt zdalnych w swoim panelu (ten sam link co klient)
+7. **Uzupełnienie linku do spotkania zdalnego** — dla wizyt zdalnych psycholog może opcjonalnie uzupełnić w panelu pole `meetingLink` linkiem do dowolnej platformy wideokonferencyjnej (link wyświetla się również klientowi w jego panelu po opłaceniu wizyty)
 8. **Przeglądanie historii płatności** — psycholog widzi listę zaksięgowanych płatności za swoje wizyty
 9. **Anulowanie wizyty** — psycholog może anulować wizytę z odpowiednim powiadomieniem (status `CANCELLED`)
 
@@ -268,13 +268,12 @@ Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik ide
 
 **Relacje między przypadkami użycia:**
 - `Opłacenie wizyty` **«include»** `Logowanie` (klient musi być uwierzytelniony)
-- `Rezerwacja wizyty zdalnej` **«extend»** `Rezerwacja wizyty` (rozszerzenie o krok generowania linku Zoom)
-- `Dostęp do linku Zoom` (zarówno dla klienta, jak i psychologa) **«include»** `Opłacenie wizyty` (precondition: wizyta opłacona)
+- `Rezerwacja wizyty zdalnej` **«extend»** `Rezerwacja wizyty` (rozszerzenie o tryb spotkania wideokonferencyjnego — ustalenie szczegółów poza aplikacją)
+- `Wyświetlenie linku do spotkania` (zarówno dla klienta, jak i psychologa) **«include»** `Opłacenie wizyty` (precondition: wizyta opłacona, opcjonalnie pole `meetingLink` uzupełnione ręcznie przez psychologa)
 
 **Aktorzy zewnętrzni i ich zaangażowanie:**
 - **Keycloak** uczestniczy we wszystkich przypadkach użycia wymagających uwierzytelnienia (przepływ OIDC PKCE)
 - **Stripe** uczestniczy w przypadku użycia `Opłacenie wizyty` (utworzenie `PaymentIntent`, webhook z potwierdzeniem)
-- **Zoom** uczestniczy w przypadkach użycia `Rezerwacja wizyty zdalnej` i `Dołączenie do spotkania Zoom` (utworzenie spotkania przez API Server-to-Server OAuth)
 
 **Kluczowe decyzje techniczne:** Świadome ograniczenie zakresu przypadków użycia dla aktora "Administrator" do niezbędnego minimum (promocja roli) podyktowane było potrzebą zachowania realistycznych ram czasowych pracy. Pełny moduł administracyjny (zarządzanie psychologami, statystyki, moderacja recenzji) został wyłączony z zakresu pracy. Świadomie wycięto również przypadki użycia związane z systemem powiadomień email (potwierdzenie wizyty, przypomnienia) oraz systemem rekomendacji psychologów opartym na uczeniu maszynowym — funkcjonalności te nie są częścią architektury docelowej opisanej w pracy.
 
@@ -285,7 +284,7 @@ Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik ide
 ## Sugerowane zrzuty ekranu do tego rozdziału
 
 > 📸 **[SCREEN DO DODANIA]**
-> **Co pokazać:** Diagram architektury logicznej nowego systemu (na podstawie `docs/architecture-diagram.md` §1, po usunięciu notification-service). Bloki: Angular (4200) → Spring Cloud Gateway (8090) → cztery serwisy domenowe (user 8081, appointment 8082, psychologist 8083, payment 8085) → MongoDB (4 bazy) i Apache Kafka. Bramka i serwisy komunikują się z Keycloak (8080). Payment-service ma linię do Stripe API, appointment-service do Zoom API. Diagram można wygenerować z bloku Mermaid `graph TB` i wyeksportować przez mermaid.live.
+> **Co pokazać:** Diagram architektury logicznej nowego systemu (na podstawie `docs/architecture-diagram.md` §1). Bloki: Angular (4200) → Spring Cloud Gateway (8090) → cztery serwisy domenowe (user 8081, appointment 8082, psychologist 8083, payment 8085) → MongoDB (4 bazy) i Apache Kafka. Bramka i serwisy komunikują się z Keycloak (8080). Payment-service ma linię do Stripe API. Diagram można wygenerować z bloku Mermaid `graph TB` i wyeksportować przez mermaid.live.
 > **Sugerowany podpis:** Rys. 2.1. Architektura logiczna systemu TheraLink w wersji mikroserwisowej
 > **Źródło:** opracowanie własne
 
@@ -320,16 +319,16 @@ Klucz wiadomości Kafka wybierany jest jako `appointmentId` (lub odpowiednik ide
 > **Źródło:** opracowanie własne
 
 > 📸 **[SCREEN DO DODANIA]**
-> **Co pokazać:** Diagram przypadków użycia UML dla aktora "Klient" — owalne use case'y (Rejestracja, Logowanie, Wyszukiwanie psychologów, Przeglądanie profilu, Rezerwacja wizyty stacjonarnej, Rezerwacja wizyty zdalnej, Opłacenie wizyty kartą, Dołączenie do spotkania Zoom, Przeglądanie historii wizyt, Edycja profilu) z aktorem-figurką "Klient" oraz aktorami zewnętrznymi (Keycloak, Stripe, Zoom). Relacje «include» i «extend» zgodnie z opisem w podrozdziale 2.8.
+> **Co pokazać:** Diagram przypadków użycia UML dla aktora "Klient" — owalne use case'y (Rejestracja, Logowanie, Wyszukiwanie psychologów, Przeglądanie profilu, Rezerwacja wizyty stacjonarnej, Rezerwacja wizyty zdalnej, Opłacenie wizyty kartą, Wyświetlenie linku do spotkania, Przeglądanie historii wizyt, Edycja profilu) z aktorem-figurką "Klient" oraz aktorami zewnętrznymi (Keycloak, Stripe). Relacje «include» i «extend» zgodnie z opisem w podrozdziale 2.8.
 > **Sugerowany podpis:** Rys. 2.8. Diagram przypadków użycia dla aktora "Klient"
 > **Źródło:** opracowanie własne
 
 > 📸 **[SCREEN DO DODANIA]**
-> **Co pokazać:** Diagram przypadków użycia UML dla aktora "Psycholog" — owalne use case'y (Rejestracja jako psycholog, Logowanie, Edycja profilu zawodowego, Definiowanie dostępności, Przeglądanie wizyt, Akceptacja/odrzucenie wizyty, Dostęp do linku Zoom, Przeglądanie płatności, Anulowanie wizyty) z aktorem-figurką "Psycholog" oraz aktorami zewnętrznymi (Keycloak, Zoom).
+> **Co pokazać:** Diagram przypadków użycia UML dla aktora "Psycholog" — owalne use case'y (Rejestracja jako psycholog, Logowanie, Edycja profilu zawodowego, Definiowanie dostępności, Przeglądanie wizyt, Akceptacja/odrzucenie wizyty, Uzupełnienie linku do spotkania zdalnego, Przeglądanie płatności, Anulowanie wizyty) z aktorem-figurką "Psycholog" oraz aktorem zewnętrznym (Keycloak).
 > **Sugerowany podpis:** Rys. 2.9. Diagram przypadków użycia dla aktora "Psycholog"
 > **Źródło:** opracowanie własne
 
 > 📸 **[SCREEN DO DODANIA]**
-> **Co pokazać:** Diagram sekwencji UML dla głównego przepływu biznesowego — rezerwacja wizyty zdalnej z płatnością. Aktorzy: Klient, Angular, Gateway, appointment-service, payment-service, Kafka, Stripe, Zoom. Kroki: rezerwacja → utworzenie PaymentIntent → płatność w Stripe → webhook → publikacja `theralink.payment.completed` → konsumpcja w appointment-service → utworzenie spotkania Zoom → publikacja `theralink.appointment.confirmed`. Można wygenerować z `docs/architecture-diagram.md` §3 (po usunięciu kroków notification).
-> **Sugerowany podpis:** Rys. 2.10. Diagram sekwencji procesu rezerwacji i opłacenia wizyty zdalnej z automatycznym utworzeniem spotkania Zoom
+> **Co pokazać:** Diagram sekwencji UML dla głównego przepływu biznesowego — rezerwacja wizyty z płatnością. Aktorzy: Klient, Angular, Gateway, appointment-service, payment-service, Kafka, Stripe. Kroki: rezerwacja → utworzenie PaymentIntent → płatność w Stripe → webhook → publikacja `theralink.payment.completed` → konsumpcja w appointment-service → aktualizacja statusu wizyty z `PAID` na `CONFIRMED` → publikacja `theralink.appointment.confirmed`. Można wygenerować z `docs/architecture-diagram.md` §3.
+> **Sugerowany podpis:** Rys. 2.10. Diagram sekwencji procesu rezerwacji i opłacenia wizyty wraz z asynchroniczną aktualizacją statusu
 > **Źródło:** opracowanie własne

@@ -27,7 +27,7 @@ ZASADY FORMATU:
 
 SCOPE PRACY:
 - OUT: notification-service, powiadomienia email (wykluczone z zakresu)
-- IN: Stripe (płatności), Zoom (linki do spotkań)
+- IN: Stripe (płatności)
 - Payment service to OSOBNE, restricted repo (PCI-DSS) — opisuj jako oddzielne
 - Stack target: Spring Boot 4.0.3, Java 25/21, Angular 21, MongoDB 7, Keycloak 25, Kafka 7.6, Azure AKS
 

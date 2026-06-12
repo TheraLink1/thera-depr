@@ -40,7 +40,6 @@ graph TB
     subgraph EXT["🌐 Zewnętrzne API"]
         direction LR
         STRIPE["💳 Stripe"]
-        ZOOM["📹 Zoom"]
     end
 
     BROWSER -->|"HTTPS + JWT"| GATEWAY
@@ -57,7 +56,6 @@ graph TB
     PAY --- DB5
 
     PAY <-->|"REST"| STRIPE
-    APPT <-->|"REST"| ZOOM
 
     style PAY fill:#ffcccc,stroke:#cc0000
     style KAFKA fill:#fff3cd,stroke:#856404
@@ -97,7 +95,7 @@ graph LR
 
 ---
 
-## 3. Przepływ: Rezerwacja + Płatność + Zoom
+## 3. Przepływ: Rezerwacja + Płatność
 
 ```mermaid
 sequenceDiagram
@@ -107,7 +105,6 @@ sequenceDiagram
     participant Appt as Appointment\nService
     participant Pay as Payment\nService
     participant Kafka
-    participant Zoom as Zoom API
 
     Klient->>Angular: Wybiera wizytę
     Angular->>Gateway: POST /appointments
@@ -124,13 +121,8 @@ sequenceDiagram
 
     Kafka->>Appt: payment.completed
     Appt->>Appt: PENDING → PAID
-
-    alt Wizyta zdalna
-        Appt->>Zoom: Utwórz meeting
-        Zoom-->>Appt: { joinUrl, startUrl }
-    end
-
     Appt->>Appt: PAID → CONFIRMED
+    Appt->>Kafka: appointment.confirmed
 ```
 
 ---

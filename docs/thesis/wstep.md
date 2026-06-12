@@ -11,13 +11,13 @@
 
 **Temat:** Sformułowanie celu pracy dyplomowej w postaci pięciu precyzyjnych, mierzalnych celów praktycznych, charakterystycznych dla pracy inżynierskiej.
 
-**Technologie:** Spring Boot, Angular, MongoDB, Keycloak, Apache Kafka, Docker, Kubernetes (Azure AKS), Stripe, Zoom API.
+**Technologie:** Spring Boot, Angular, MongoDB, Keycloak, Apache Kafka, Docker, Kubernetes (Azure AKS), Stripe.
 
 **Co zostało zaimplementowane:** Celem pracy dyplomowej jest zdobycie praktycznej wiedzy z zakresu projektowania i implementacji aplikacji o rozbudowanej architekturze mikroserwisowej, na przykładzie migracji platformy TheraLink z monolitu Node.js/Express + Next.js do systemu rozproszonego opartego o Spring Boot, Angular i Keycloak. Realizacja celu głównego obejmuje cztery cele szczegółowe stanowiące wyzwania charakterystyczne dla nowoczesnych systemów rozproszonych:
 
 1. **Postawienie dwóch środowisk uruchomieniowych** — środowiska lokalnego (ang. *local*) opartego o Docker Compose, służącego do codziennej pracy deweloperskiej oraz testów integracyjnych, oraz środowiska produkcyjnego (ang. *production*) zrealizowanego w chmurze Microsoft Azure z wykorzystaniem usług zarządzanych (Azure Kubernetes Service, Azure Cosmos DB, Azure Event Hubs, Azure Key Vault). Środowiska różnią się sposobem zarządzania sekretami, źródłem konfiguracji oraz topologią sieciową, lecz dzielą identyczny kod aplikacyjny.
 2. **Wprowadzenie komunikacji asynchronicznej przez Apache Kafka** — zastąpienie synchronicznych wywołań HTTP między modułami zdarzeniowymi przepływami przez platformę strumieniowania zdarzeń. Komunikacja asynchroniczna umożliwia luźne powiązanie serwisów (ang. *loose coupling*), tolerancję na chwilowe niedostępności konsumentów oraz odtworzenie zdarzeń (ang. *event replay*) z zachowanych offsetów.
-3. **Integracja z serwisami zewnętrznymi** — implementacja interakcji z platformą płatniczą Stripe (obsługa rzeczywistych płatności kartą z wykorzystaniem przepływu *PaymentIntent* oraz webhooków) oraz API platformy Zoom (automatyczne tworzenie spotkań wideokonferencyjnych w mechanizmie *Server-to-Server OAuth* po zaksięgowaniu płatności za wizytę zdalną).
+3. **Integracja z serwisami zewnętrznymi** — implementacja interakcji z platformą płatniczą Stripe (obsługa rzeczywistych płatności kartą z wykorzystaniem przepływu *PaymentIntent* oraz webhooków HTTPS z walidacją sygnatury HMAC-SHA256), umożliwiająca rzeczywistą obsługę transakcji finansowych za wizyty psychologiczne.
 4. **Orkiestracja kontenerów Kubernetes** — konteneryzacja każdego mikroserwisu (Spring Boot, Keycloak, frontend Angular) w obrazach Docker, wdrożenie ich na klastrze Azure Kubernetes Service oraz zarządzanie cyklem życia aplikacji przy pomocy manifestów Kubernetes oraz pakietów Helm.
 
 **Kluczowe decyzje techniczne:** Sformułowanie celu pracy jako kombinacji jednego celu głównego (zdobycie wiedzy praktycznej) z czterema konkretnymi celami szczegółowymi pozwala na obiektywną weryfikację stopnia realizacji pracy. Każdy z celów szczegółowych jest mierzalny — środowiska albo działają, albo nie; komunikacja asynchroniczna albo została wprowadzona, albo nie; integracje z serwisami zewnętrznymi albo realizują rzeczywiste transakcje, albo nie; orkiestracja Kubernetes albo zarządza klastrem, albo nie. Taki układ celów wzmacnia inżynierski, praktyczny charakter pracy w przeciwieństwie do prac o charakterze teoretycznym.
@@ -25,7 +25,7 @@
 **Pliki/komponenty:** Realizacja każdego celu została opisana w odpowiednich rozdziałach pracy:
 - Cel 1 (środowiska): rozdziały 8, 9, 10
 - Cel 2 (Kafka): rozdział 6
-- Cel 3 (Stripe, Zoom): rozdział 11
+- Cel 3 (Stripe): rozdział 11
 - Cel 4 (Kubernetes): rozdziały 8, 9
 
 ---
@@ -38,7 +38,7 @@
 
 **Co zostało zaimplementowane:** Wybór tematu pracy podyktowany został trzema niezależnymi przesłankami. Po pierwsze — architektura mikroserwisowa, mimo upowszechnienia, pozostaje dziedziną wymagającą praktycznej znajomości szeregu współpracujących technologii (orkiestracja, magistrale zdarzeń, dystrybuowana tożsamość, izolacja baz danych per serwis), której nie sposób zdobyć wyłącznie poprzez literaturę. Po drugie — analiza ofert pracy na rynku polskim w obszarze rozwoju oprogramowania backendowego (przeprowadzona w II kwartale 2026 roku) wskazuje, że znajomość stosu Spring Boot + Kafka + Kubernetes stanowi wymóg w blisko 70% ofert dla stanowisk *mid* i *senior*, co czyni temat pracy bezpośrednio związanym z perspektywami zawodowymi. Po trzecie — pierwotna wersja platformy TheraLink, opracowana w trakcie wcześniejszego cyklu kształcenia, ujawniła szereg konkretnych ograniczeń architektury monolitycznej (szczegółowo opisanych w rozdziale 1): krytyczne luki bezpieczeństwa, brak izolacji awarii, niespójność stosu technologicznego, brak skalowalności poszczególnych modułów oraz silne uzależnienie od pojedynczego dostawcy chmurowego (AWS Cognito, AWS Amplify). Refaktoryzacja systemu do architektury rozproszonej stanowi zatem nie tylko cel edukacyjny, lecz również odpowiedź na konkretne, udokumentowane problemy techniczne.
 
-**Kluczowe decyzje techniczne:** Wybór konkretnej platformy aplikacyjnej (TheraLink — rezerwacja wizyt psychologicznych) jako poligonu doświadczalnego do wdrożenia architektury mikroserwisowej był celowy — domena charakteryzuje się dostatecznym zróżnicowaniem operacji (rezerwacja, płatność, wideokonferencja, zarządzanie dostępnością), aby uzasadnić podział na osobne serwisy, lecz jednocześnie pozostaje wystarczająco prosta, aby możliwe było jej pełne zrealizowanie w ramach pracy dyplomowej.
+**Kluczowe decyzje techniczne:** Wybór konkretnej platformy aplikacyjnej (TheraLink — rezerwacja wizyt psychologicznych) jako poligonu doświadczalnego do wdrożenia architektury mikroserwisowej był celowy — domena charakteryzuje się dostatecznym zróżnicowaniem operacji (rezerwacja, płatność, zarządzanie profilami klientów i psychologów, zarządzanie dostępnością), aby uzasadnić podział na osobne serwisy, lecz jednocześnie pozostaje wystarczająco prosta, aby możliwe było jej pełne zrealizowanie w ramach pracy dyplomowej.
 
 **Pliki/komponenty:** Nie dotyczy.
 
@@ -62,7 +62,7 @@
 8. Przygotowanie infrastruktury wdrożeniowej opartej na Docker i Kubernetes (rozdział 8).
 9. Wdrożenie aplikacji w chmurze Microsoft Azure (rozdział 9).
 10. Stworzenie oddzielnych środowisk: produkcyjnego oraz lokalnego (rozdział 10).
-11. Dodanie nowych funkcjonalności — rzeczywistej obsługi płatności online oraz wideokonferencji Zoom (rozdział 11).
+11. Dodanie nowych funkcjonalności — rzeczywistej obsługi płatności online (rozdział 11).
 12. Testy funkcjonalne i wydajnościowe nowego rozwiązania (rozdział 12).
 13. Przygotowanie dokumentacji technicznej (rozdział 13).
 
@@ -109,7 +109,7 @@ W toku pracy wykorzystano środowiska programistyczne IntelliJ IDEA Ultimate (Sp
 
 **Część pierwsza — analiza i projektowanie (rozdziały 1–2)** — przedstawia stan pierwotny systemu TheraLink w architekturze monolitycznej, identyfikuje jego ograniczenia techniczne i bezpieczeństwa, a następnie prezentuje projekt nowej architektury mikroserwisowej wraz z diagramami komponentów, modelem danych i przepływami zdarzeń. Rozdział 2 zawiera również bezpośrednie porównanie architektury monolitycznej z architekturą mikroserwisową wraz z diagramami przypadków użycia (ang. *use case diagrams*) dla głównych aktorów systemu (klient, psycholog).
 
-**Część druga — implementacja (rozdziały 3–11)** — opisuje realizację poszczególnych zadań migracyjnych: warstwy serwerowej (Spring Boot), warstwy klienckiej (Angular), systemu tożsamości (Keycloak), komunikacji asynchronicznej (Apache Kafka), warstwy danych (MongoDB), infrastruktury kontenerowej (Docker, Kubernetes), wdrożenia chmurowego (Microsoft Azure), separacji środowisk (LOCAL, PROD) oraz integracji z serwisami zewnętrznymi (Stripe, Zoom).
+**Część druga — implementacja (rozdziały 3–11)** — opisuje realizację poszczególnych zadań migracyjnych: warstwy serwerowej (Spring Boot), warstwy klienckiej (Angular), systemu tożsamości (Keycloak), komunikacji asynchronicznej (Apache Kafka), warstwy danych (MongoDB), infrastruktury kontenerowej (Docker, Kubernetes), wdrożenia chmurowego (Microsoft Azure), separacji środowisk (LOCAL, PROD) oraz integracji z platformą płatniczą (Stripe).
 
 **Część trzecia — weryfikacja i dokumentacja (rozdziały 12–13)** — prezentuje wyniki testów funkcjonalnych oraz wydajnościowych nowego rozwiązania, a także omawia dokumentację techniczną przygotowaną w toku pracy (OpenAPI/Swagger dla każdego serwisu, instrukcje uruchomienia, schematy zdarzeń Kafka).
 
